@@ -231,3 +231,11 @@ function showCriticalAlert(msg) {
 document.getElementById('alert-dismiss')?.addEventListener('click', () => {
     document.getElementById('full-screen-alert').classList.add("hidden");
 });
+
+// Polling fallback — refresh timeline every 5 seconds
+setInterval(() => {
+    if (currentIncidentId) {
+        loadTimeline(currentIncidentId);
+        refreshSummary(currentIncidentId);
+    }
+}, 5000);

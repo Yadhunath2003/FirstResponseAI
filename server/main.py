@@ -133,6 +133,13 @@ async def process_voice(
         async with aiofiles.open(full_path, 'wb') as out_file:
             content = await audio_blob.read()
             await out_file.write(content)
+        
+        if not transcript or transcript == "[no transcript]":
+            from server.ai.claude import transcribe_audio
+            server_transcript = await transcribe_audio(full_path)
+            print(f"SERVER TRANSCRIPTION RESULT: '{server_transcript}'")
+            if server_transcript:
+                transcript = server_transcript
             
     response_msg = await channel_manager.process_communication(
         channel_id, unit_id, incident_id, transcript, audio_path

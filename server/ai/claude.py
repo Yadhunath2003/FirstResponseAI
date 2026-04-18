@@ -35,6 +35,41 @@ async def detect_conflicts(communications):
         pass
     return []
 
+async def transcribe_audio(audio_path: str) -> str:
+    """Transcribe audio file using Gemini inline base64."""
+    try:
+        import base64
+        import mimetypes
+        
+        with open(audio_path, "rb") as f:
+            audio_data = base64.b64encode(f.read()).decode("utf-8")
+        
+        # Detect mime type from extension
+        ext = audio_path.split(".")[-1].lower()
+        mime_map = {
+            "mp4": "audio/mp4",
+            "webm": "audio/webm",
+            "ogg": "audio/ogg",
+            "wav": "audio/wav",
+            "m4a": "audio/mp4",
+        }
+        mime_type = mime_map.get(ext, "audio/webm")
+        
+        response = model.generate_content([
+            {
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": audio_data
+                }
+            },
+            "Transcribe this audio exactly as spoken. Output only the transcript text, nothing else."
+        ])
+        result = response.text.strip()
+        print(f"Transcription success: '{result}'")
+        return result
+    except Exception as e:
+        print(f"Transcription error: {e}")
+        return ""
 async def suggest_map_zones(latest_comm, incident, existing_zones):
     content = f"""
     Incident Location: {incident['location_name']} ({incident['location_lat']}, {incident['location_lng']})
