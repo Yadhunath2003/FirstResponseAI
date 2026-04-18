@@ -88,6 +88,14 @@ def init_db():
             resolved_by TEXT,
             FOREIGN KEY (incident_id) REFERENCES incidents(id)
         );
+
+        CREATE TABLE IF NOT EXISTS pending_dispatches (
+            id TEXT PRIMARY KEY,
+            incident_id TEXT NOT NULL,
+            callsign TEXT NOT NULL,
+            channel_id TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
     """)
     conn.commit()
     conn.close()
@@ -197,6 +205,38 @@ def store_communication(
     conn.commit()
     conn.close()
     return comm_id, now
+
+def get_unit_by_callsign(callsign: str) -> dict | None:
+    conn = _get_conn()
+    row = conn.execute("SELECT * FROM units WHERE callsign = ?", (callsign,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def store_pending_dispatch(incident_id: str, callsign: str, channel_id: str) -> None:
+    conn = _get_conn()
+    pd_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO pending_dispatches (id, incident_id, callsign, channel_id, created_at) VALUES (?, ?, ?, ?, ?)",
+        (pd_id, incident_id, callsign, channel_id, now),
+    )
+    conn.commit()
+    conn.close()
+
+def get_pending_dispatch(callsign: str) -> dict | None:
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT * FROM pending_dispatches WHERE callsign = ? ORDER BY created_at ASC LIMIT 1",
+        (callsign,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def delete_pending_dispatch(callsign: str) -> None:
+    conn = _get_conn()
+    conn.execute("DELETE FROM pending_dispatches WHERE callsign = ?", (callsign,))
+    conn.commit()
+    conn.close()
 
 def update_comm_annotations(comm_id: str, annotations: dict):
     conn = _get_conn()

@@ -19,58 +19,106 @@
         </div>
     </div>
 
-    <!-- Pre-incident modal to select an incident if not embedded -->
-    <div id="dashboard-incident-picker" class="modal-overlay">
-        <div class="modal">
-            <h2>Select Incident for Dashboard</h2>
-            <div id="dashboard-incident-list" class="list-container">
+    <!-- Top-level tab navigation -->
+    <div id="dash-tab-nav" style="display:flex; background:#111; border-bottom:1px solid #222; padding:0 16px;">
+        <button class="dash-tab-btn active" id="tab-btn-operations" onclick="switchDashTab('operations')" style="padding:12px 20px; background:none; border:none; border-bottom:2px solid #e74c3c; color:#fff; font-size:0.9em; font-weight:600; cursor:pointer; letter-spacing:0.05em;">OPERATIONS</button>
+        <button class="dash-tab-btn" id="tab-btn-dispatch" onclick="switchDashTab('dispatch')" style="padding:12px 20px; background:none; border:none; border-bottom:2px solid transparent; color:#888; font-size:0.9em; font-weight:600; cursor:pointer; letter-spacing:0.05em;">DISPATCH</button>
+    </div>
+
+    <!-- Operations Tab -->
+    <div id="tab-operations">
+        <!-- Pre-incident modal to select an incident if not embedded -->
+        <div id="dashboard-incident-picker" class="modal-overlay">
+            <div class="modal">
+                <h2>Select Incident for Dashboard</h2>
+                <div id="dashboard-incident-list" class="list-container">
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard hidden" id="main-dashboard-wrap">
+            <div class="header">
+                <h1>FIRSTRESPONSE AI : <span id="incident-name" style="font-weight: 300;">Loading...</span></h1>
+                <div class="header-stats">
+                    <span id="header-callsign">Viewer</span>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <!-- Left Side: Interactive Map & Suggestions -->
+                <div class="left-col">
+                    <div class="map-container" id="map"></div>
+
+                    <div class="suggestions-panel">
+                        <h3>AI Map Suggestions</h3>
+                        <div id="suggestions-list">
+                            <div class="empty-state">No pending suggestions.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Side: AI Summary & Timeline -->
+                <div class="right-col">
+                    <div class="summary-panel">
+                        <h3>AI Summary</h3>
+                        <div id="ai-summary-text" class="summary-text" style="white-space: pre-wrap;">
+                            Waiting for communications to generate initial summary...
+                        </div>
+                    </div>
+
+                    <div class="timeline-panel">
+                        <div style="display:flex; justify-content: space-between; align-items:center;">
+                            <h3>Timeline</h3>
+                            <input type="text" id="timeline-search" placeholder="Search history..." />
+                        </div>
+                        <div class="timeline" id="timeline">
+                            <div class="empty-state">Waiting for communications...</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="dashboard hidden" id="main-dashboard-wrap">
-        <div class="header">
-            <h1>FIRSTRESPONSE AI : <span id="incident-name" style="font-weight: 300;">Loading...</span></h1>
-            <div class="header-stats">
-                 <span id="header-callsign">Viewer</span>
-                 <!-- Embedded toggle map / comms (for mobile view if needed) -->
+    <!-- Dispatch Tab -->
+    <div id="tab-dispatch" style="display:none; padding:20px; max-width:700px; margin:0 auto;">
+        <h2 style="color:#e74c3c; letter-spacing:0.1em; margin-bottom:20px;">🎙 DISPATCH CONSOLE</h2>
+
+        <!-- PTT Button -->
+        <div style="text-align:center; margin-bottom:16px;">
+            <button id="dispatch-ptt-btn" style="background:#c0392b; color:#fff; border:none; border-radius:50%; width:120px; height:120px; font-size:0.85em; font-weight:700; cursor:pointer; letter-spacing:0.05em; box-shadow:0 0 0 4px #e74c3c44;">HOLD TO<br>SPEAK</button>
+        </div>
+        <div id="dispatch-live-transcript" style="min-height:40px; color:#aaa; font-style:italic; text-align:center; margin-bottom:20px;">Press and hold to speak a dispatch call...</div>
+
+        <!-- Parsed Preview Card -->
+        <div id="dispatch-preview" style="display:none; background:#111; border:1px solid #333; border-radius:6px; padding:16px; margin-bottom:20px;">
+            <h3 style="color:#e74c3c; margin-bottom:12px; font-size:0.9em; letter-spacing:0.1em;">PARSED INCIDENT PREVIEW</h3>
+            <div style="display:grid; grid-template-columns:120px 1fr; gap:6px; font-size:0.9em;">
+                <span style="color:#666;">Type:</span>       <span id="prev-type" style="color:#fff;"></span>
+                <span style="color:#666;">Address:</span>    <span id="prev-address" style="color:#fff;"></span>
+                <span style="color:#666;">Description:</span><span id="prev-desc" style="color:#fff;"></span>
+                <span style="color:#666;">Notes:</span>      <span id="prev-notes" style="color:#aaa; font-style:italic;"></span>
+                <span style="color:#666;">Priority:</span>  <span id="prev-priority" style="font-weight:700;"></span>
+                <span style="color:#666;">Location:</span>  <span id="prev-location" style=""></span>
+            </div>
+            <!-- Manual location search shown if geocoding failed -->
+            <div id="prev-location-search-wrap" style="display:none; margin-top:12px;">
+                <div style="position:relative;">
+                    <input type="text" id="prev-location-search" placeholder="Search address..." autocomplete="off"
+                           style="width:100%; box-sizing:border-box; background:#1a1a1a; border:1px solid #444; color:#fff; padding:8px; border-radius:4px;" />
+                    <div id="prev-location-results" style="display:none; position:absolute; top:100%; left:0; right:0; background:#1a1a1a; border:1px solid #333; border-radius:4px; z-index:100; max-height:180px; overflow-y:auto;"></div>
+                </div>
             </div>
         </div>
 
-        <div class="dashboard-grid">
-            <!-- Left Side: Interactive Map & Suggestions -->
-            <div class="left-col">
-                <div class="map-container" id="map"></div>
-                
-                <div class="suggestions-panel">
-                    <h3>AI Map Suggestions</h3>
-                    <div id="suggestions-list">
-                        <!-- populated via js -->
-                        <div class="empty-state">No pending suggestions.</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right Side: AI Summary & Timeline -->
-            <div class="right-col">
-                <div class="summary-panel">
-                    <h3>AI Summary</h3>
-                    <div id="ai-summary-text" class="summary-text" style="white-space: pre-wrap;">
-                        Waiting for communications to generate initial summary...
-                    </div>
-                </div>
-
-                <div class="timeline-panel">
-                    <div style="display:flex; justify-content: space-between; align-items:center;">
-                        <h3>Timeline</h3>
-                        <input type="text" id="timeline-search" placeholder="Search history..." />
-                    </div>
-                    <div class="timeline" id="timeline">
-                        <div class="empty-state">Waiting for communications...</div>
-                    </div>
-                </div>
-            </div>
+        <!-- Action Buttons -->
+        <div style="display:flex; gap:12px;">
+            <button id="create-incident-btn-dispatch" onclick="confirmDispatch()" disabled
+                style="flex:1; background:#c0392b; color:#fff; border:none; padding:14px; border-radius:4px; font-size:1em; font-weight:700; cursor:pointer; opacity:0.4; letter-spacing:0.05em;">
+                CREATE INCIDENT
+            </button>
         </div>
+        <div id="dispatch-status-msg" style="margin-top:12px; font-size:0.85em; text-align:center;"></div>
     </div>
 
     <!-- Leaflet JS -->
@@ -80,5 +128,16 @@
     <script src="map.js"></script>
     <script src="summary.js"></script>
     <script src="dashboard.js"></script>
+    <script src="dispatch.js"></script>
+    <script>
+    function switchDashTab(name) {
+        document.getElementById('tab-operations').style.display = name === 'operations' ? '' : 'none';
+        document.getElementById('tab-dispatch').style.display   = name === 'dispatch'   ? '' : 'none';
+        document.getElementById('tab-btn-operations').style.borderBottomColor = name === 'operations' ? '#e74c3c' : 'transparent';
+        document.getElementById('tab-btn-operations').style.color = name === 'operations' ? '#fff' : '#888';
+        document.getElementById('tab-btn-dispatch').style.borderBottomColor = name === 'dispatch' ? '#e74c3c' : 'transparent';
+        document.getElementById('tab-btn-dispatch').style.color = name === 'dispatch' ? '#fff' : '#888';
+    }
+    </script>
 </body>
 </html>

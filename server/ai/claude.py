@@ -85,6 +85,26 @@ async def search_history(communications: list[dict], query: str) -> dict:
     return {"results": [], "summary": raw or "Error performing search."}
 
 
+async def geocode_address(address: str) -> dict | None:
+    try:
+        import requests
+        def _sync():
+            r = requests.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={"q": address, "format": "json", "limit": 1, "countrycodes": "us"},
+                headers={"User-Agent": "FirstResponseAI/2.0"},
+                timeout=5,
+            )
+            return r.json()
+        results = await asyncio.to_thread(_sync)
+        if results:
+            r = results[0]
+            return {"lat": float(r["lat"]), "lng": float(r["lon"]), "display": r["display_name"]}
+        return None
+    except Exception as e:
+        print(f"Geocoding error: {e}")
+        return None
+
 async def parse_dispatch_call(transcript: str) -> dict:
     raw = await _ask(DISPATCH_PARSE_PROMPT, f"Dispatch transcript: {transcript}")
     return _parse_json(raw) or {}

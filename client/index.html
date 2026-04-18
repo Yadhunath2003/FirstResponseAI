@@ -15,6 +15,23 @@
 function log(msg) { console.log(msg); }
 </script>
 <body>
+    <div id="dispatch-alert-overlay" class="hidden" style="position:fixed; inset:0; background:#0a0f1a; z-index:900; display:flex; flex-direction:column;">
+        <div style="background:#3498db; padding:20px; text-align:center;">
+            <h1 style="color:#fff; margin:0; font-size:1.3em; letter-spacing:0.1em;">🚨 YOU HAVE BEEN DISPATCHED</h1>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:24px; text-align:center; gap:8px;">
+            <h2 id="dispatch-incident-type" style="color:#fff; margin:0; font-size:1.4em;"></h2>
+            <p id="dispatch-address" style="color:#aaa; font-size:1.1em; margin:0;"></p>
+            <p id="dispatch-description" style="color:#aaa; margin:0;"></p>
+            <p id="dispatch-notes" style="color:#888; font-style:italic; margin:0;"></p>
+            <div style="margin-top:24px; margin-bottom:8px;">
+                <p style="color:#aaa; margin-bottom:10px; font-size:0.85em; letter-spacing:0.05em;">REPORT TO:</p>
+                <div id="dispatch-channel-badge" style="background:#3498db; color:#fff; padding:14px 32px; border-radius:4px; font-size:1.2em; font-weight:700; letter-spacing:0.1em;"></div>
+            </div>
+            <button id="dispatch-respond-btn" style="margin-top:16px; background:#3498db; color:#fff; border:none; padding:16px 48px; font-size:1.1em; font-weight:700; border-radius:6px; cursor:pointer; letter-spacing:0.05em;">RESPOND</button>
+        </div>
+    </div>
+
     <div id="full-screen-alert" class="hidden">
         <div class="alert-content">
             <h1 id="alert-title">CRITICAL ALERT</h1>
@@ -109,6 +126,10 @@ function log(msg) { console.log(msg); }
             <iframe id="map-iframe" src="" style="width:100%;height:100%;border:none;display:block;"></iframe>
         </div>
 
+        <div class="tab-content" id="tab-dispatch">
+            <iframe id="dispatch-iframe" src="/dashboard#dispatch" style="width:100%;height:100%;border:none;"></iframe>
+        </div>
+
         <!-- TICKER & PTT -->
         <div class="ticker-bar" id="message-ticker">
             <i>Waiting for messages...</i>
@@ -134,6 +155,7 @@ function log(msg) { console.log(msg); }
             <div class="nav-tab active" data-target="tab-cards">Cards</div>
             <div class="nav-tab" data-target="tab-dashboard">Dashboard</div>
             <div class="nav-tab" data-target="tab-map">Map</div>
+            <div class="nav-tab" data-target="tab-dispatch">Dispatch</div>
     </div>
 
     <script src="/static/registration.js"></script>

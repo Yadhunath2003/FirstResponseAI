@@ -380,7 +380,31 @@ function handleWSMessage(msg) {
         showCriticalAlert(msg);
     } else if (msg.type === 'alert' && msg.priority === 'critical') {
         showCriticalAlert(msg);
+    } else if (msg.type === 'dispatched') {
+        showDispatchAlert(msg);
     }
+}
+
+function showDispatchAlert(msg) {
+    document.getElementById('dispatch-incident-type').textContent =
+        (msg.incident_type || '').replace(/_/g, ' ').toUpperCase();
+    document.getElementById('dispatch-address').textContent = msg.address || '';
+    document.getElementById('dispatch-description').textContent = msg.description || '';
+    document.getElementById('dispatch-notes').textContent = msg.notes || '';
+    document.getElementById('dispatch-channel-badge').textContent =
+        (msg.report_to || msg.assigned_channel || 'Command Channel').toUpperCase();
+
+    const overlay = document.getElementById('dispatch-alert-overlay');
+    overlay.classList.remove('hidden');
+
+    if (audioPlayer) audioPlayer.playAlertTone();
+
+    document.getElementById('dispatch-respond-btn').onclick = () => {
+        overlay.classList.add('hidden');
+        if (msg.incident_id) {
+            joinIncident(msg.incident_id, msg.incident_name || 'Dispatched Incident');
+        }
+    };
 }
 
 function processIncomingAudio(msg) {

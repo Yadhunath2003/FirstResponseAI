@@ -15,9 +15,10 @@ from server.storage.database import (
     init_db, create_incident, get_active_incident, get_incidents,
     get_incident, register_unit, join_incident, get_unit, get_units_for_incident,
     create_map_zone, get_map_zones, get_latest_summary, get_pending_suggestions,
-    resolve_suggestion, get_recent_communications
+    resolve_suggestion, get_recent_communications,
+    get_unit_by_callsign, store_pending_dispatch, get_pending_dispatch, delete_pending_dispatch,
 )
-from server.ai.claude import search_history
+from server.ai.claude import search_history, parse_dispatch_call, geocode_address
 from server.utils.network import get_server_url, generate_qr
 
 
@@ -95,18 +96,76 @@ async def join_incident_endpoint(incident_id: str, payload: dict):
     unit_id = payload.get("unit_id")
     if not unit_id:
         return JSONResponse(status_code=400, content={"error": "unit_id required"})
-        
+
     join_incident(unit_id, incident_id)
-    
-    # Broadcast join
+
     unit = get_unit(unit_id)
     if unit:
         await ws_manager.broadcast_to_incident(incident_id, {
             "type": "unit_joined",
             "unit_callsign": unit["callsign"],
-            "unit_type": unit["unit_type"]
+            "unit_type": unit["unit_type"],
         })
+
+        pending = get_pending_dispatch(unit["callsign"])
+        if pending and pending["incident_id"] == incident_id:
+            inc = get_incident(incident_id)
+            if inc:
+                await ws_manager.send_to_unit(incident_id, unit_id, {
+                    "type": "dispatched",
+                    "incident_id": incident_id,
+                    "incident_name": inc["name"],
+                    "incident_type": inc["incident_type"],
+                    "address": inc.get("location_name", ""),
+                    "description": "",
+                    "notes": "",
+                    "priority": "emergency",
+                    "assigned_channel": pending["channel_id"],
+                    "report_to": f"{pending['channel_id'].title()} Channel",
+                })
+            delete_pending_dispatch(unit["callsign"])
+
     return {"status": "joined"}
+
+
+@app.post("/api/dispatch/parse")
+async def dispatch_parse_endpoint(payload: dict):
+    transcript = payload.get("transcript", "")
+    parsed = await parse_dispatch_call(transcript)
+
+    geo = None
+    if parsed.get("address"):
+        geo = await geocode_address(parsed["address"])
+
+    return {
+        "units_mentioned": parsed.get("units_dispatched", []),
+        "incident_type": parsed.get("incident_type", "other"),
+        "address": parsed.get("address"),
+        "description": parsed.get("description"),
+        "notes": parsed.get("notes"),
+        "priority": parsed.get("priority", "routine"),
+        "location_lat": geo["lat"] if geo else None,
+        "location_lng": geo["lng"] if geo else None,
+        "location_display": geo["display"] if geo else None,
+    }
+
+
+@app.post("/api/dispatch/confirm")
+async def dispatch_confirm_endpoint(payload: dict):
+    parsed = payload.get("parsed", {})
+
+    incident_type = parsed.get("incident_type", "other")
+    address = parsed.get("address") or "Unknown Location"
+    incident_name = f"{incident_type.replace('_', ' ').title()} — {address}"
+
+    incident_id = create_incident(
+        name=incident_name,
+        incident_type=incident_type,
+        location_name=parsed.get("location_display") or address,
+        lat=parsed.get("location_lat") or 0.0,
+        lng=parsed.get("location_lng") or 0.0,
+    )
+    return get_incident(incident_id)
 
 # --- CHANNELS & VOICE ---
 
