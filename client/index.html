@@ -70,11 +70,14 @@ function log(msg) { console.log(msg); }
                 <option value="hazmat">Hazmat</option>
                 <option value="other">Other</option>
             </select>
-            <input type="text" id="inc-location-name" placeholder="Location Name" />
-            <div style="display:flex; gap: 10px;">
-                <input type="number" id="inc-lat" placeholder="Lat" value="38.9592" />
-                <input type="number" id="inc-lng" placeholder="Lng" value="-95.2453" />
+            <div style="position:relative;">
+                <input type="text" id="inc-location-search" placeholder="Search location..." autocomplete="off" style="width:100%;" />
+                <div id="inc-location-results" style="display:none; position:absolute; top:100%; left:0; right:0; background:#1a1a1a; border:1px solid #333; border-radius:4px; z-index:100; max-height:200px; overflow-y:auto;"></div>
             </div>
+            <div id="inc-location-selected" style="display:none; color:#4caf50; font-size:0.85em; margin-top:4px;"></div>
+            <input type="hidden" id="inc-lat" />
+            <input type="hidden" id="inc-lng" />
+            <input type="hidden" id="inc-location-name" />
             <div class="btn-row">
                 <button id="submit-incident-btn" class="primary-btn">Create & Join</button>
                 <button id="cancel-incident-btn" class="secondary-btn">Cancel</button>

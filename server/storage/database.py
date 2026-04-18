@@ -198,6 +198,15 @@ def store_communication(
     conn.close()
     return comm_id, now
 
+def update_comm_annotations(comm_id: str, annotations: dict):
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE communications SET ai_annotations_json = ? WHERE id = ?",
+        (json.dumps(annotations), comm_id),
+    )
+    conn.commit()
+    conn.close()
+
 def get_recent_communications(incident_id: str, limit: int = 50) -> list[dict]:
     conn = _get_conn()
     rows = conn.execute(

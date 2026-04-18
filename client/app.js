@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('create-incident-modal').classList.add('hidden');
     });
     document.getElementById('submit-incident-btn').addEventListener('click', createAndJoinIncident);
+    initLocationSearch();
 
     // Audio Playback
     if(window.AudioPlaybackManager) {
@@ -69,14 +70,103 @@ async function loadIncidents() {
     }
 }
 
+function initLocationSearch() {
+    const searchInput = document.getElementById('inc-location-search');
+    const resultsDiv = document.getElementById('inc-location-results');
+    const selectedDiv = document.getElementById('inc-location-selected');
+    const latInput = document.getElementById('inc-lat');
+    const lngInput = document.getElementById('inc-lng');
+    const nameInput = document.getElementById('inc-location-name');
+    let debounceTimer = null;
+    let dispatcherLat = null;
+    let dispatcherLng = null;
+
+    // Grab dispatcher location once so nearby results rank first
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => { dispatcherLat = pos.coords.latitude; dispatcherLng = pos.coords.longitude; },
+            () => {} // silently ignore if denied
+        );
+    }
+
+    searchInput.addEventListener('input', () => {
+        // Clear selection if user edits after picking a result
+        latInput.value = '';
+        lngInput.value = '';
+        nameInput.value = '';
+        selectedDiv.style.display = 'none';
+
+        clearTimeout(debounceTimer);
+        const query = searchInput.value.trim();
+        if (query.length < 3) {
+            resultsDiv.style.display = 'none';
+            resultsDiv.innerHTML = '';
+            return;
+        }
+        debounceTimer = setTimeout(() => fetchLocationResults(query), 300);
+    });
+
+    async function fetchLocationResults(query) {
+        try {
+            let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&countrycodes=us`;
+            // Bias results toward dispatcher's location using a 1°×1° viewbox
+            if (dispatcherLat !== null && dispatcherLng !== null) {
+                const d = 0.5;
+                const viewbox = `${dispatcherLng - d},${dispatcherLat + d},${dispatcherLng + d},${dispatcherLat - d}`;
+                url += `&viewbox=${viewbox}`;
+            }
+            const res = await fetch(url, { headers: { 'User-Agent': 'FirstResponseAI/2.0' } });
+            const results = await res.json();
+            renderResults(results);
+        } catch (e) {
+            resultsDiv.style.display = 'none';
+        }
+    }
+
+    function renderResults(results) {
+        resultsDiv.innerHTML = '';
+        if (!results.length) {
+            resultsDiv.style.display = 'none';
+            return;
+        }
+        results.forEach(r => {
+            const item = document.createElement('div');
+            item.textContent = r.display_name;
+            item.style.cssText = 'padding:8px 10px; cursor:pointer; border-bottom:1px solid #222; font-size:0.85em; color:#ddd;';
+            item.addEventListener('mouseenter', () => item.style.background = '#2a2a2a');
+            item.addEventListener('mouseleave', () => item.style.background = '');
+            item.addEventListener('click', () => {
+                latInput.value = r.lat;
+                lngInput.value = r.lon;
+                nameInput.value = r.display_name;
+                searchInput.value = r.display_name;
+                resultsDiv.style.display = 'none';
+                resultsDiv.innerHTML = '';
+                selectedDiv.textContent = '✓ ' + r.display_name;
+                selectedDiv.style.display = 'block';
+            });
+            resultsDiv.appendChild(item);
+        });
+        resultsDiv.style.display = 'block';
+    }
+
+    // Hide dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !resultsDiv.contains(e.target)) {
+            resultsDiv.style.display = 'none';
+        }
+    });
+}
+
 async function createAndJoinIncident() {
     const name = document.getElementById('inc-name').value.trim();
     const type = document.getElementById('inc-type').value;
-    const location = document.getElementById('inc-location-name').value.trim();
+    const location = document.getElementById('inc-location-name').value;
     const lat = document.getElementById('inc-lat').value;
     const lng = document.getElementById('inc-lng').value;
 
-    if(!name) return alert("Incident name required");
+    if (!name) return alert("Incident name required");
+    if (!lat) return alert("Please select a location from the search results");
 
     try {
         const res = await fetch('/api/incidents', {
