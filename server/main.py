@@ -253,6 +253,55 @@ async def delete_zone(incident_id: str, zone_id: str):
     await ws_manager.broadcast_to_incident(incident_id, {"type": "zones_refresh"})
     return {"status": "deleted"}
 
+@app.post("/api/dispatch/parse")
+async def parse_dispatch(payload: dict):
+    import json
+    from server.channels.prompts import DISPATCH_PARSE_PROMPT
+    transcript = payload.get("transcript", "")
+    if not transcript:
+        return JSONResponse(status_code=400, content={"error": "transcript required"})
+    try:
+        import google.generativeai as genai
+        from server.config import GEMINI_API_KEY
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(DISPATCH_PARSE_PROMPT + f"\n\nTranscript: {transcript}")
+        raw = response.text.strip()
+        start, end = raw.find("{"), raw.rfind("}") + 1
+        if start != -1 and end > start:
+            parsed = json.loads(raw[start:end])
+            if not parsed.get("location_lat") and parsed.get("address"):
+                try:
+                    import httpx
+                    geo_url = f"https://nominatim.openstreetmap.org/search?q={parsed['address']}&format=json&limit=1"
+                    async with httpx.AsyncClient() as client:
+                        geo_res = await client.get(geo_url, headers={"User-Agent": "FirstResponseAI/1.0"})
+                        geo_data = geo_res.json()
+                        if geo_data:
+                            parsed["location_lat"] = float(geo_data[0]["lat"])
+                            parsed["location_lng"] = float(geo_data[0]["lon"])
+                            parsed["location_display"] = geo_data[0]["display_name"]
+                except Exception as e:
+                    print(f"Geocoding failed: {e}")
+            return parsed
+    except Exception as e:
+        print(f"Dispatch parse error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/api/dispatch/confirm")
+async def confirm_dispatch(payload: dict):
+    parsed = payload.get("parsed", {})
+    name = parsed.get("description") or f"{parsed.get('incident_type', 'Incident').replace('_', ' ').title()}"
+    if parsed.get("address"):
+        name = f"{name} — {parsed['address']}"
+    incident_id = create_incident(
+        name=name[:100],
+        incident_type=parsed.get("incident_type", "other"),
+        location_name=parsed.get("location_display") or parsed.get("address") or "Unknown",
+        lat=parsed.get("location_lat") or 38.9592,
+        lng=parsed.get("location_lng") or -95.2453,
+    )
+    return get_incident(incident_id)
 # --- DASHBOARD HISTORY ---
 
 @app.get("/api/incidents/{incident_id}/timeline")
