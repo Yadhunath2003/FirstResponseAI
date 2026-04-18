@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>FirstResponse AI V2 Dashboard</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="full-screen-alert" class="hidden">
+        <div class="alert-content">
+            <h1 id="alert-title">CRITICAL SETTING</h1>
+            <p id="alert-text"></p>
+            <button id="alert-dismiss">DISMISS</button>
+        </div>
+    </div>
+
+    <!-- Pre-incident modal to select an incident if not embedded -->
+    <div id="dashboard-incident-picker" class="modal-overlay">
+        <div class="modal">
+            <h2>Select Incident for Dashboard</h2>
+            <div id="dashboard-incident-list" class="list-container">
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard hidden" id="main-dashboard-wrap">
+        <div class="header">
+            <h1>FIRSTRESPONSE AI : <span id="incident-name" style="font-weight: 300;">Loading...</span></h1>
+            <div class="header-stats">
+                 <span id="header-callsign">Viewer</span>
+                 <!-- Embedded toggle map / comms (for mobile view if needed) -->
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Left Side: Interactive Map & Suggestions -->
+            <div class="left-col">
+                <div class="map-container" id="map"></div>
+                
+                <div class="suggestions-panel">
+                    <h3>AI Map Suggestions</h3>
+                    <div id="suggestions-list">
+                        <!-- populated via js -->
+                        <div class="empty-state">No pending suggestions.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: AI Summary & Timeline -->
+            <div class="right-col">
+                <div class="summary-panel">
+                    <h3>AI Summary</h3>
+                    <div id="ai-summary-text" class="summary-text" style="white-space: pre-wrap;">
+                        Waiting for communications to generate initial summary...
+                    </div>
+                </div>
+
+                <div class="timeline-panel">
+                    <div style="display:flex; justify-content: space-between; align-items:center;">
+                        <h3>Timeline</h3>
+                        <input type="text" id="timeline-search" placeholder="Search history..." />
+                    </div>
+                    <div class="timeline" id="timeline">
+                        <div class="empty-state">Waiting for communications...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- App Logic -->
+    <script src="map.js"></script>
+    <script src="summary.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+</html>

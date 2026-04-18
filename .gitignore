@@ -1,0 +1,8 @@
+certs/
+data/
+.env
+__pycache__/
+*.pyc
+/TopSecret.md
+
+

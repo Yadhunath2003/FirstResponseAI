@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>FirstResponse AI V2</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div id="full-screen-alert" class="hidden">
+        <div class="alert-content">
+            <h1 id="alert-title">CRITICAL ALERT</h1>
+            <p id="alert-text"></p>
+            <button id="alert-dismiss">DISMISS</button>
+        </div>
+    </div>
+
+    <!-- SCREEN 1: Registration -->
+    <div id="screen-registration" class="screen active">
+        <div class="header">
+            <h1>Unit Registration</h1>
+        </div>
+        <div class="content" id="reg-type-select">
+            <h2>Select Unit Type</h2>
+            <div class="grid-buttons">
+                <button data-type="engine">Engine</button>
+                <button data-type="ladder">Ladder</button>
+                <button data-type="medic">Medic</button>
+                <button data-type="battalion_chief">Battalion</button>
+                <button data-type="division">Division</button>
+                <button data-type="staging">Staging</button>
+                <button data-type="command" class="critical-btn">Command</button>
+            </div>
+        </div>
+        <div class="content hidden" id="reg-number-select">
+            <h2>Enter Unit Number</h2>
+            <input type="text" id="unit-number-input" placeholder="e.g. 7 or A" autocomplete="off" />
+            <button id="reg-confirm-btn" class="primary-btn">Confirm</button>
+            <button id="reg-back-btn" class="secondary-btn">Back</button>
+        </div>
+    </div>
+
+    <!-- SCREEN 2: Incident Selection -->
+    <div id="screen-incidents" class="screen hidden">
+        <div class="header">
+            <h1>Active Incidents</h1>
+            <span id="reg-callsign-display"></span>
+        </div>
+        <div class="content">
+            <div id="incident-list" class="list-container">
+                <!-- Fetch list of incidents from /api/incidents -->
+            </div>
+            <button id="create-incident-btn" class="primary-btn">Create New Incident</button>
+        </div>
+        
+        <div id="create-incident-modal" class="modal hidden">
+            <h3>New Incident</h3>
+            <input type="text" id="inc-name" placeholder="Incident Name" />
+            <select id="inc-type">
+                <option value="structure_fire">Structure Fire</option>
+                <option value="mci">MCI</option>
+                <option value="hazmat">Hazmat</option>
+                <option value="other">Other</option>
+            </select>
+            <input type="text" id="inc-location-name" placeholder="Location Name" />
+            <div style="display:flex; gap: 10px;">
+                <input type="number" id="inc-lat" placeholder="Lat" value="38.9592" />
+                <input type="number" id="inc-lng" placeholder="Lng" value="-95.2453" />
+            </div>
+            <div class="btn-row">
+                <button id="submit-incident-btn" class="primary-btn">Create & Join</button>
+                <button id="cancel-incident-btn" class="secondary-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCREEN 3: Main Interface -->
+    <div id="screen-main" class="screen hidden">
+        <div class="top-bar">
+            <div>
+                <span class="callsign" id="main-callsign"></span>
+                <span class="connection-status">
+                    <span class="status-dot disconnected" id="status-dot"></span>
+                </span>
+            </div>
+            <div class="incident-name" id="main-incident-name"></div>
+        </div>
+
+        <!-- TABS CONTENT -->
+        <div class="tab-content active" id="tab-cards">
+            <div class="channel-grid" id="channel-grid"></div>
+        </div>
+        <div class="tab-content" id="tab-dashboard">
+            <iframe id="dashboard-iframe" src="/dashboard?embed=true"></iframe>
+        </div>
+
+        <!-- TICKER & PTT -->
+        <div class="ticker-bar" id="message-ticker">
+            <i>Waiting for messages...</i>
+        </div>
+
+        <div class="bottom-bar">
+            <span class="live-transcript" id="live-transcript"></span>
+            <button class="mic-btn" id="mic-btn" disabled>
+                <div class="mic-content">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" y1="19" x2="12" y2="23"/>
+                        <line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
+                    <span id="ptt-label">HOLD TO TALK</span>
+                </div>
+            </button>
+        </div>
+
+        <!-- BOTTOM NAV TABS -->
+        <div class="nav-tabs">
+            <div class="nav-tab active" data-target="tab-cards">Cards</div>
+            <div class="nav-tab" data-target="tab-dashboard">Dashboard</div>
+            <div class="nav-tab" data-target="tab-map" onclick="window.location.href='/dashboard#map'">Map</div>
+        </div>
+    </div>
+
+    <script src="/static/registration.js"></script>
+    <script src="/static/audio.js"></script>
+    <script src="/static/voice.js"></script>
+    <script src="/static/ws.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
