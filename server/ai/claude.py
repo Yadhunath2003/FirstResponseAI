@@ -2,7 +2,7 @@ import asyncio
 import json
 import google.generativeai as genai
 
-from server.config import GEMINI_API_KEY, GEMINI_MODEL
+from server.config import GEMINI_API_KEY, GEMINI_MODEL, ELEVENLABS_API_KEY
 from server.channels.prompts import (
     SUMMARY_PROMPT, CONFLICT_PROMPT, MAP_SUGGESTION_PROMPT, SEARCH_PROMPT,
     TRIAGE_PROMPT, COMMAND_PROMPT, LOGISTICS_PROMPT, COMMS_PROMPT,
@@ -147,6 +147,39 @@ async def analyze_comms(communications: list[dict]) -> dict | None:
 
 
 async def transcribe_audio(audio_path: str) -> str:
+    """Transcribe audio using ElevenLabs Scribe API, falling back to Gemini if unavailable."""
+    if ELEVENLABS_API_KEY:
+        try:
+            import requests
+
+            ext = audio_path.split(".")[-1].lower()
+            mime_map = {
+                "mp4": "audio/mp4",
+                "webm": "audio/webm",
+                "ogg": "audio/ogg",
+                "wav": "audio/wav",
+                "m4a": "audio/mp4",
+            }
+            mime_type = mime_map.get(ext, "audio/webm")
+
+            def _sync_elevenlabs():
+                with open(audio_path, "rb") as f:
+                    resp = requests.post(
+                        "https://api.elevenlabs.io/v1/speech-to-text",
+                        headers={"xi-api-key": ELEVENLABS_API_KEY},
+                        files={"file": (audio_path.split("/")[-1], f, mime_type)},
+                        data={"model_id": "scribe_v1"},
+                        timeout=30,
+                    )
+                resp.raise_for_status()
+                return resp.json().get("text", "").strip()
+
+            result = await asyncio.to_thread(_sync_elevenlabs)
+            print(f"ElevenLabs transcription success: '{result}'")
+            return result
+        except Exception as e:
+            print(f"ElevenLabs transcription error: {e}, falling back to Gemini")
+
     try:
         import base64
 
@@ -170,7 +203,7 @@ async def transcribe_audio(audio_path: str) -> str:
             ]).text.strip()
 
         result = await asyncio.to_thread(_sync)
-        print(f"Transcription success: '{result}'")
+        print(f"Gemini transcription success: '{result}'")
         return result
     except Exception as e:
         print(f"Transcription error: {e}")

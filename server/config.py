@@ -5,6 +5,8 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1024"))
 
 DB_PATH = os.getenv("DB_PATH", "data/incident.db")
