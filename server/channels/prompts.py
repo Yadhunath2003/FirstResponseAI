@@ -14,9 +14,28 @@ Respond as JSON: { "conflicts": [{ "description": "string", "severity": "critica
 
 MAP_SUGGESTION_PROMPT = """Based on this emergency communication, determine if any map zone changes
 should be suggested. Types: danger (red), warm (orange), cold (green), blocked_road,
-staging_area, landing_zone, evacuation_route. Only suggest if the communication clearly
-implies a geographic change. If nothing geographic, respond with { "suggest": false }.
-If suggesting: { "suggest": true, "zone_type": "string", "reason": "string", "description": "string" }.
+staging_area, landing_zone, evacuation_route.
+
+Only suggest if the communication clearly implies a geographic change.
+If nothing geographic, respond with { "suggest": false }.
+
+If suggesting, respond with:
+{ 
+  "suggest": true, 
+  "zone_type": "string", 
+  "reason": "string", 
+  "description": "string",
+  "radius_meters": <number>
+}
+
+For radius_meters, use realistic emergency values:
+- Small containment zone: 100-300m
+- Structure fire perimeter: 300-500m  
+- Hazmat zone: 500-1000m
+- Large evacuation: 1000-5000m
+- Regional evacuation (5 miles): 8046m
+- Never exceed 16000m
+
 Do NOT include coordinates - the incident commander will place the zone manually."""
 
 SEARCH_PROMPT = """You are an AI assistant helping query an emergency response timeline.
