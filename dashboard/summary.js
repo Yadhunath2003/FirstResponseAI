@@ -13,10 +13,16 @@ async function refreshSummary(incidentId) {
     }
 }
 
+let currentZones = [];
+
 async function refreshSuggestions(incidentId) {
     try {
-        const res = await fetch(`/api/incidents/${incidentId}/suggestions`);
-        const suggestions = await res.json();
+        const [suggRes, zoneRes] = await Promise.all([
+            fetch(`/api/incidents/${incidentId}/suggestions`),
+            fetch(`/api/incidents/${incidentId}/zones`)
+        ]);
+        const suggestions = await suggRes.json();
+        currentZones = await zoneRes.json();
         
         const list = document.getElementById('suggestions-list');
         list.innerHTML = "";
@@ -31,11 +37,12 @@ async function refreshSuggestions(incidentId) {
             el.className = 'suggestion-card';
             el.innerHTML = `
                 <div style="flex-grow:1;">
-                    <strong>🗺️ ${sugg.suggestion_type.toUpperCase()} ZONE</strong><br>                    <small>${sugg.description}</small>
+                    <strong>🗺️ ${sugg.suggestion_type.toUpperCase()} ZONE</strong><br>
+                    <small>${sugg.description}</small>
                 </div>
                 <div style="display:flex; flex-direction: column; gap:4px;">
-                    <button class="primary-btn" style="font-size: 10px;" onclick="resolveSuggestion('${sugg.id}', 'accept')">Approve</button>
-                    <button class="secondary-btn" style="font-size: 10px;" onclick="resolveSuggestion('${sugg.id}', 'reject')">Reject</button>
+                    <button class="primary-btn" style="font-size:10px;" onclick="resolveSuggestion('${sugg.id}', 'accept', '${sugg.suggestion_type}', ${sugg.data_json?.radius_meters || 500})">Approve</button>
+                    <button class="secondary-btn" style="font-size:10px;" onclick="resolveSuggestion('${sugg.id}', 'reject', '${sugg.suggestion_type}', 0)">Reject</button>
                 </div>
             `;
             list.appendChild(el);
@@ -45,8 +52,32 @@ async function refreshSuggestions(incidentId) {
     }
 }
 
-async function resolveSuggestion(suggId, action) {
+async function resolveSuggestion(suggId, action, zoneType, radius) {
     try {
+        if (action === 'accept') {
+            const zoneGroups = {
+                danger: ['danger', 'hot', 'evacuation', 'evacuation_route'],
+                hot: ['danger', 'hot', 'evacuation', 'evacuation_route'],
+                evacuation: ['danger', 'hot', 'evacuation', 'evacuation_route'],
+                evacuation_route: ['danger', 'hot', 'evacuation', 'evacuation_route'],
+                warm: ['warm'],
+                cold: ['cold', 'safe'],
+                safe: ['cold', 'safe'],
+                staging_area: ['staging_area', 'staging'],
+                staging: ['staging_area', 'staging'],
+                landing_zone: ['landing_zone', 'landing'],
+                landing: ['landing_zone', 'landing'],
+            };
+            
+            const relatedTypes = zoneGroups[zoneType] || [zoneType];
+            const toDelete = currentZones.filter(z => relatedTypes.includes(z.zone_type));
+            console.log('Deleting zones:', toDelete.map(z => z.zone_type));
+            
+            await Promise.all(toDelete.map(z =>
+                fetch(`/api/incidents/${currentIncidentId}/zones/${z.id}`, { method: 'DELETE' })
+            ));
+        }
+
         await fetch(`/api/incidents/${currentIncidentId}/suggestions/${suggId}/${action}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -54,11 +85,11 @@ async function resolveSuggestion(suggId, action) {
                 resolved_by: dashUnitId || 'Viewer',
                 lat: incidentLocation[0],
                 lng: incidentLocation[1],
-                radius: 8046  // 5 miles in meters
+                radius: radius
             })
         });
         await refreshSuggestions(currentIncidentId);
-        await refreshMapZones(currentIncidentId);  // ADD THIS — refresh map after approval
+        await refreshMapZones(currentIncidentId);
     } catch (e) {
         console.error("Failed to resolve suggestion", e);
     }

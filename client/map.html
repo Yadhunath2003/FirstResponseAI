@@ -42,7 +42,7 @@
             await loadZones();
 
             // Poll for zone updates every 5s
-            setInterval(loadZones, 5000);
+            setInterval(loadZones, 15000);
         }
 
         async function loadZones() {
@@ -56,15 +56,20 @@
 
                 zoneList.forEach(zone => {
                     const colorMap = {
-                        danger: '#e74c3c',
-                        hot: '#e74c3c',
-                        warm: '#f39c12',
-                        cold: '#2ecc71',
-                        staging_area: '#9b59b6',
-                        landing_zone: '#3498db',
-                        blocked_road: '#e67e22',
+                        danger:          '#e74c3c',
+                        hot:             '#e74c3c',
+                        warm:            '#f39c12',
+                        cold:            '#2ecc71',
+                        safe:            '#2ecc71',
+                        staging_area:    '#9b59b6',
+                        staging:         '#9b59b6',
+                        landing_zone:    '#3498db',
+                        landing:         '#3498db',
+                        blocked_road:    '#e67e22',
+                        evacuation:      '#e74c3c',
                     };
                     const color = colorMap[zone.zone_type] || '#3498db';
+                    const radiusMeters = Math.min(Math.max(zone.radius_meters || 500, 100), 50000);
                     const circle = L.circle([zone.center_lat, zone.center_lng], {
                         color,
                         fillColor: color,
@@ -73,6 +78,7 @@
                     }).addTo(map);
                     circle.bindPopup(`<b>${zone.label}</b><br>${zone.zone_type}`);
                     zones[zone.id] = circle;
+                    map.fitBounds(circle.getBounds(), { padding: [20, 20] });
                 });
             } catch(e) {
                 console.error('Zone load error:', e);

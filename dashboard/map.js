@@ -22,27 +22,44 @@ function initMap(lat, lng) {
 function updateZones(zones) {
     if(!map) return;
     
-    // Clear out simple layers for a fresh render
     for(const key in mapZones) {
         map.removeLayer(mapZones[key]);
     }
     mapZones = {};
 
     zones.forEach(zone => {
-        let color = "#3498db";
-        if (zone.zone_type === 'hot') color = "#e74c3c";
-        else if(zone.zone_type === 'warm') color = "#f39c12";
-        else if(zone.zone_type === 'cold') color = "#2ecc71";
-        else if(zone.zone_type === 'staging') color = "#9b59b6";
+        const colorMap = {
+            danger:          '#e74c3c',
+            hot:             '#e74c3c',
+            warm:            '#f39c12',
+            cold:            '#2ecc71',
+            safe:            '#2ecc71',
+            staging_area:    '#9b59b6',
+            staging:         '#9b59b6',
+            landing_zone:    '#3498db',
+            landing:         '#3498db',
+            blocked_road:    '#e67e22',
+            evacuation:      '#e74c3c',
+        };
         
-        let zLayer = L.circle([zone.location_lat, zone.location_lng], {
+        const color = colorMap[zone.zone_type] || '#3498db';
+        
+        // radius_meters is already in meters — Leaflet L.circle uses meters natively
+        // Clamp between 100m minimum and 50km maximum for sanity
+        const radiusMeters = Math.min(Math.max(zone.radius_meters || 500, 100), 50000);
+        
+        const circle = L.circle([zone.center_lat, zone.center_lng], {
             color: color,
             fillColor: color,
             fillOpacity: 0.2,
-            radius: zone.radius || 30
+            weight: 2,
+            radius: radiusMeters
         }).addTo(map);
 
-        zLayer.bindPopup(`<b>${zone.label}</b><br>Type: ${zone.zone_type}`);
-        mapZones[zone.id] = zLayer;
+        circle.bindPopup(`<b>${zone.label || zone.zone_type}</b><br>Type: ${zone.zone_type}<br>Radius: ${(radiusMeters/1000).toFixed(1)} km`);
+        mapZones[zone.id] = circle;
+        
+        // Auto-fit map to show all zones
+        map.fitBounds(circle.getBounds(), { padding: [20, 20] });
     });
 }

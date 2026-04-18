@@ -214,6 +214,16 @@ async def resolve_zone_suggestion(incident_id: str, suggestion_id: str, action: 
         })
     return {"status": "resolved"}
 
+@app.delete("/api/incidents/{incident_id}/zones/{zone_id}")
+async def delete_zone(incident_id: str, zone_id: str):
+    from server.storage.database import _get_conn
+    conn = _get_conn()
+    conn.execute("UPDATE map_zones SET status = 'deleted' WHERE id = ? AND incident_id = ?", (zone_id, incident_id))
+    conn.commit()
+    conn.close()
+    await ws_manager.broadcast_to_incident(incident_id, {"type": "zones_refresh"})
+    return {"status": "deleted"}
+
 # --- DASHBOARD HISTORY ---
 
 @app.get("/api/incidents/{incident_id}/timeline")

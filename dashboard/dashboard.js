@@ -162,6 +162,9 @@ function handleWsMessage(msg) {
         case 'zone_suggestion':
             refreshSuggestions(currentIncidentId);
             break;
+        case 'zones_refresh':
+            refreshMapZones(currentIncidentId);
+            break;
         case 'zone_update':
             refreshMapZones(currentIncidentId);
             break;
@@ -239,4 +242,4 @@ setInterval(() => {
         refreshSummary(currentIncidentId);
         refreshSuggestions(currentIncidentId);
     }
-}, 5000);
+}, 15000);
