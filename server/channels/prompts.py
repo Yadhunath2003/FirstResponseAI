@@ -106,3 +106,22 @@ Always return valid JSON only — no preamble, no markdown code fences:
   "priority": "string"
 }"""
 
+DISPATCH_PARSE_PROMPT = """You are a 911 dispatch CAD system. Parse the following dispatch transcript into structured incident data.
+Extract: incident type, address/location, description, priority, and any units mentioned.
+Then geocode the address using your knowledge to get approximate lat/lng coordinates.
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "incident_type": "structure_fire|mci|hazmat|rescue|other",
+  "address": "full address string or null",
+  "description": "brief incident description",
+  "notes": "additional caller notes or null",
+  "priority": "emergency|urgent|routine",
+  "units_mentioned": [],
+  "location_lat": 38.9592,
+  "location_lng": -95.2453,
+  "location_display": "human readable location string or null"
+}
+
+If you cannot determine lat/lng, set both to null.
+For priority: emergency = life threatening, urgent = serious but stable, routine = minor."""
