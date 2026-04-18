@@ -3,59 +3,33 @@ import aiofiles
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form, File, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 
-from server.config import PORT
 from server.channels.manager import ChannelManager
 from server.channels.schemas import UnitRegistration, IncidentCreate
 from server.realtime.websocket import ws_manager
 from server.storage.database import (
-    init_db, create_incident, get_active_incident, get_incidents,
+    init_db, create_incident, get_incidents,
     get_incident, register_unit, join_incident, get_unit, get_units_for_incident,
     create_map_zone, get_map_zones, get_latest_summary, get_pending_suggestions,
     resolve_suggestion, get_recent_communications,
-    get_unit_by_callsign, store_pending_dispatch, get_pending_dispatch, delete_pending_dispatch,
+    get_pending_dispatch, delete_pending_dispatch,
 )
 from server.ai.claude import search_history, parse_dispatch_call, geocode_address
-from server.utils.network import get_server_url, generate_qr
 
 
 channel_manager = ChannelManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     init_db()
     os.makedirs("data/audio", exist_ok=True)
-    url = get_server_url(PORT)
-    print(f"\n{'='*50}")
-    print(f"  FirstResponse AI Server Running (V2)")
-    print(f"  Phone UI:   {url}")
-    print(f"  Dashboard:  {url}/dashboard")
-    print(f"{'='*50}")
-    generate_qr(url)
-    print()
     yield
 
 app = FastAPI(title="FirstResponse AI", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-os.makedirs("data/audio", exist_ok=True)
-app.mount("/dashboard", StaticFiles(directory="dashboard", html=True), name="dashboard")
-app.mount("/static", StaticFiles(directory="client"), name="client_static")
 app.mount("/audio", StaticFiles(directory="data/audio"), name="audio_static")
-
-@app.get("/")
-async def serve_client():
-    return FileResponse("client/index.html")
 
 # --- REGISTRATION & INCIDENTS ---
 
@@ -232,10 +206,6 @@ async def create_zone(incident_id: str, payload: dict):
         "zone_data": zone
     })
     return zone
-
-@app.get("/map")
-async def serve_map():
-    return FileResponse("client/map.html")
 
 # --- AI OUTPUTS ---
 
