@@ -10,6 +10,10 @@
     <link rel="manifest" href="/static/manifest.json">
     <link rel="stylesheet" href="/static/styles.css">
 </head>
+<!-- DEBUG CONSOLE - remove before final demo -->
+<script>
+function log(msg) { console.log(msg); }
+</script>
 <body>
     <div id="full-screen-alert" class="hidden">
         <div class="alert-content">
@@ -128,7 +132,79 @@
 
     <script src="/static/registration.js"></script>
     <script src="/static/audio.js"></script>
-    <script src="/static/voice.js"></script>
+    <script>
+class VoiceCaptureManager {
+    constructor(onInterim, onDone) {
+        this.onInterim = onInterim;
+        this.onDone = onDone;
+        this.isRecording = false;
+        this.mediaRecorder = null;
+        this.audioChunks = [];
+        this.stream = null;
+        this.recognition = null;
+        this.finalTranscript = '';
+        this._initSpeech();
+    }
+    _initSpeech() {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) return;
+        this.recognition = new SR();
+        this.recognition.continuous = true;
+        this.recognition.interimResults = true;
+        this.recognition.lang = 'en-US';
+        this.recognition.onresult = (event) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) this.finalTranscript += event.results[i][0].transcript;
+                else interim += event.results[i][0].transcript;
+            }
+            if (this.onInterim) this.onInterim(this.finalTranscript + interim);
+        };
+        this.recognition.onerror = (e) => console.warn("SpeechRec error:", e.error);
+    }
+    _getSupportedMimeType() {
+        const types = ['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg'];
+        for (const t of types) { if (MediaRecorder.isTypeSupported(t)) return t; }
+        return '';
+    }
+    async startRecording() {
+        if (this.isRecording) return;
+        this.isRecording = true;
+        this.finalTranscript = '';
+        this.audioChunks = [];
+        try {
+            this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mimeType = this._getSupportedMimeType();
+            this.mediaRecorder = new MediaRecorder(this.stream, mimeType ? { mimeType } : {});
+            this.mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) this.audioChunks.push(e.data); };
+            this.mediaRecorder.onstop = () => {
+                const blob = new Blob(this.audioChunks, { type: this.mediaRecorder.mimeType });
+                this._finish(blob);
+            };
+            this.mediaRecorder.start();
+            if (this.recognition) { try { this.recognition.start(); } catch(e) {} }
+        } catch (err) {
+            console.error("Mic error:", err.name, err.message);
+            this.isRecording = false;
+        }
+    }
+    stopRecording() {
+        if (!this.isRecording) return;
+        this.isRecording = false;
+        if (this.recognition) this.recognition.stop();
+        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') this.mediaRecorder.stop();
+        if (this.stream) this.stream.getTracks().forEach(t => t.stop());
+    }
+    _finish(audioBlob) {
+        const formData = new FormData();
+        const ext = audioBlob.type.includes('mp4') ? 'mp4' : audioBlob.type.includes('ogg') ? 'ogg' : 'webm';
+        formData.append("audio_blob", audioBlob, "recording." + ext);
+        formData.append("transcript", this.finalTranscript.trim() || "[no transcript]");
+        if (this.onDone) this.onDone(formData);
+    }
+}
+console.log('VoiceCaptureManager loaded inline');
+</script>
     <script src="/static/ws.js"></script>
     <script src="/static/app.js"></script>
 </body>

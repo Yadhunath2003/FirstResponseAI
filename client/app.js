@@ -112,7 +112,30 @@ async function joinIncident(incId, incName) {
         showScreen('screen-main');
         
         initWebSocket();
-        initVoiceCapture();
+setTimeout(() => {
+    voiceRecorder = new VoiceCaptureManager(
+        (interimTranscript) => {
+            liveTranscript.innerText = interimTranscript;
+        },
+        async (formData) => {
+            liveTranscript.innerText = '';
+            if (!activeChannel) return;
+            formData.append("channel_id", activeChannel);
+            formData.append("unit_id", myUnitId);
+            formData.append("incident_id", currentIncidentId);
+            micBtn.classList.remove("recording");
+            document.getElementById('ptt-label').innerText = "SENDING...";
+            try {
+                await fetch('/api/voice', { method: 'POST', body: formData });
+            } catch(err) {
+                console.error("Voice send failed", err);
+            } finally {
+                document.getElementById('ptt-label').innerText = "HOLD TO TALK";
+            }
+        }
+    );
+    console.log('voiceRecorder initialized:', !!voiceRecorder);
+}, 1000);
 
     } catch(err) {
         console.error(err);
@@ -180,6 +203,7 @@ function selectChannel(channelId, color) {
 let voiceRecorder = null;
 
 function initVoiceCapture() {
+    log('initVoiceCapture called, VoiceCaptureManager=' + (typeof window.VoiceCaptureManager));
     if(window.VoiceCaptureManager) {
         voiceRecorder = new VoiceCaptureManager(
             (interimTranscript) => {
@@ -188,14 +212,11 @@ function initVoiceCapture() {
             async (formData) => {
                 liveTranscript.innerText = '';
                 if (!activeChannel) return;
-                
                 formData.append("channel_id", activeChannel);
                 formData.append("unit_id", myUnitId);
                 formData.append("incident_id", currentIncidentId);
-                
                 micBtn.classList.remove("recording");
                 document.getElementById('ptt-label').innerText = "SENDING...";
-                
                 try {
                     await fetch('/api/voice', { method: 'POST', body: formData });
                 } catch(err) {
@@ -205,14 +226,21 @@ function initVoiceCapture() {
                 }
             }
         );
+        log('voiceRecorder created: ' + !!voiceRecorder);
+    } else {
+        log('VoiceCaptureManager not found — retrying in 500ms');
+        setTimeout(initVoiceCapture, 500);
     }
 }
 
 // Touch events for PTT
 micBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    if (!activeChannel || micBtn.disabled || !voiceRecorder) return;
-    
+    log('PTT touchstart fired, activeChannel=' + activeChannel + ' voiceRecorder=' + !!voiceRecorder); // ADD THIS
+    if (!activeChannel || micBtn.disabled || !voiceRecorder) {
+        log('PTT blocked — reason: activeChannel=' + activeChannel + ' disabled=' + micBtn.disabled + ' recorder=' + !!voiceRecorder); // ADD THIS
+        return;
+    }
     micBtn.classList.add("recording");
     document.getElementById('ptt-label').innerText = "RECORDING...";
     voiceRecorder.startRecording();

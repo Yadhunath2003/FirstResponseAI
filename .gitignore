@@ -4,5 +4,6 @@ data/
 __pycache__/
 *.pyc
 /TopSecret.md
-
+IMPROVEMENTS.md
+gencert.py
 
