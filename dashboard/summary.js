@@ -31,8 +31,7 @@ async function refreshSuggestions(incidentId) {
             el.className = 'suggestion-card';
             el.innerHTML = `
                 <div style="flex-grow:1;">
-                    <strong>Type: ${sugg.suggested_type.toUpperCase()}</strong><br>
-                    <small>${sugg.description}</small>
+                    <strong>🗺️ ${sugg.suggestion_type.toUpperCase()} ZONE</strong><br>                    <small>${sugg.description}</small>
                 </div>
                 <div style="display:flex; flex-direction: column; gap:4px;">
                     <button class="primary-btn" style="font-size: 10px;" onclick="resolveSuggestion('${sugg.id}', 'accept')">Approve</button>
@@ -55,10 +54,11 @@ async function resolveSuggestion(suggId, action) {
                 resolved_by: dashUnitId || 'Viewer',
                 lat: incidentLocation[0],
                 lng: incidentLocation[1],
-                radius: 40 // Default radius
+                radius: 8046  // 5 miles in meters
             })
         });
-        refreshSuggestions(currentIncidentId);
+        await refreshSuggestions(currentIncidentId);
+        await refreshMapZones(currentIncidentId);  // ADD THIS — refresh map after approval
     } catch (e) {
         console.error("Failed to resolve suggestion", e);
     }

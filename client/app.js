@@ -17,7 +17,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Top-level Navigation Tabs
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.addEventListener('click', () => {
-            if (tab.dataset.target === 'tab-map') return; // Redirects handled inline
+            if (tab.dataset.target === 'tab-map') {
+                document.getElementById('map-iframe').src = `/map?incident_id=${currentIncidentId}`;
+            }
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             tab.classList.add('active');
@@ -107,7 +109,8 @@ async function joinIncident(incId, incName) {
         document.getElementById('main-incident-name').innerText = incName;
         document.getElementById('main-callsign').innerText = myCallsign;
         document.getElementById('dashboard-iframe').src = `/dashboard?embed=true&incident_id=${incId}&unit_id=${myUnitId}`;
-        
+        document.getElementById('map-iframe').src = `/map?incident_id=${incId}`;
+
         await initChannels();
         showScreen('screen-main');
         

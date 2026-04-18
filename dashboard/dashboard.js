@@ -237,5 +237,6 @@ setInterval(() => {
     if (currentIncidentId) {
         loadTimeline(currentIncidentId);
         refreshSummary(currentIncidentId);
+        refreshSuggestions(currentIncidentId);
     }
 }, 5000);

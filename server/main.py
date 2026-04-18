@@ -174,6 +174,10 @@ async def create_zone(incident_id: str, payload: dict):
     })
     return zone
 
+@app.get("/map")
+async def serve_map():
+    return FileResponse("client/map.html")
+
 # --- AI OUTPUTS ---
 
 @app.get("/api/incidents/{incident_id}/summary")

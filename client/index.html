@@ -102,6 +102,10 @@ function log(msg) { console.log(msg); }
             <iframe id="dashboard-iframe" src="/dashboard?embed=true"></iframe>
         </div>
 
+        <div class="tab-content" id="tab-map">
+            <iframe id="map-iframe" src="" style="width:100%;height:100%;border:none;display:block;"></iframe>
+        </div>
+
         <!-- TICKER & PTT -->
         <div class="ticker-bar" id="message-ticker">
             <i>Waiting for messages...</i>
@@ -126,8 +130,7 @@ function log(msg) { console.log(msg); }
         <div class="nav-tabs">
             <div class="nav-tab active" data-target="tab-cards">Cards</div>
             <div class="nav-tab" data-target="tab-dashboard">Dashboard</div>
-            <div class="nav-tab" data-target="tab-map" onclick="window.location.href='/dashboard#map'">Map</div>
-        </div>
+            <div class="nav-tab" data-target="tab-map">Map</div>
     </div>
 
     <script src="/static/registration.js"></script>
