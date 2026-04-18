@@ -270,9 +270,41 @@ async def search_incident_history(incident_id: str, payload: dict):
 
 @app.websocket("/ws/{incident_id}/{unit_id}")
 async def websocket_endpoint(websocket: WebSocket, incident_id: str, unit_id: str):
+    import json as _json
     await ws_manager.connect(incident_id, unit_id, websocket)
+
+    # Tell the new peer who is already here, then announce them to the others.
+    await ws_manager.send_to_unit(incident_id, unit_id, {
+        "type": "peers",
+        "peer_ids": ws_manager.get_peers(incident_id, exclude_unit=unit_id),
+    })
+    await ws_manager.broadcast_to_incident(incident_id, {
+        "type": "peer_joined",
+        "peer_id": unit_id,
+    }, exclude_unit=unit_id)
+
     try:
         while True:
-            await websocket.receive_text()
+            raw = await websocket.receive_text()
+            try:
+                msg = _json.loads(raw)
+            except Exception:
+                continue
+            # WebRTC signaling relay: clients send {type:"signal", to:"<peer>", data:{...}}
+            if msg.get("type") == "signal":
+                target = msg.get("to")
+                data = msg.get("data")
+                if target and data is not None:
+                    await ws_manager.send_to_unit(incident_id, target, {
+                        "type": "signal",
+                        "from": unit_id,
+                        "data": data,
+                    })
     except WebSocketDisconnect:
+        pass
+    finally:
         ws_manager.disconnect(incident_id, unit_id)
+        await ws_manager.broadcast_to_incident(incident_id, {
+            "type": "peer_left",
+            "peer_id": unit_id,
+        })

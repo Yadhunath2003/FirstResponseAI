@@ -143,6 +143,10 @@ export type WSMessage =
   | { type: "zones_refresh" }
   | { type: "conflict"; description: string; severity: string; channels_involved: string[]; units_involved: string[] }
   | { type: "unit_joined"; unit_callsign: string; unit_type: string }
+  | { type: "peers"; peer_ids: string[] }
+  | { type: "peer_joined"; peer_id: string }
+  | { type: "peer_left"; peer_id: string }
+  | { type: "signal"; from: string; data: unknown }
   | {
       type: "dispatched";
       incident_id: string;

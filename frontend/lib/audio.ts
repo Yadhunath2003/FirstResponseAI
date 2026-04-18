@@ -16,8 +16,13 @@ export interface PTTHandle {
 
 export async function startPTT(options?: {
   onInterim?: (text: string) => void;
+  // Optional existing stream (e.g. from the WebRTC mesh) to reuse so we don't
+  // prompt for mic twice. When provided, its tracks are NOT stopped on finish.
+  stream?: MediaStream;
 }): Promise<PTTHandle> {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const providedStream = options?.stream;
+  const stream = providedStream ?? (await navigator.mediaDevices.getUserMedia({ audio: true }));
+  const ownsStream = !providedStream;
   const mimeType = pickMimeType();
   const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
   const chunks: Blob[] = [];
@@ -59,7 +64,7 @@ export async function startPTT(options?: {
     stop: () =>
       new Promise<PTTResult>((resolve) => {
         rec.onstop = () => {
-          stream.getTracks().forEach((t) => t.stop());
+          if (ownsStream) stream.getTracks().forEach((t) => t.stop());
           if (recognizer) {
             try {
               recognizer.stop();
