@@ -9,9 +9,12 @@ The thing people trip on first is networking, so it goes first.
 
 - **FastAPI** runs on `http://127.0.0.1:8000` — loopback only, plaintext.
   Nothing on your LAN or your phone ever reaches it directly.
-- **Next.js** runs on `https://0.0.0.0:3000` with the self-signed cert in
-  `certs/` (covers `localhost` + the machine's LAN IP, so one cert works for
-  both Mac and phone).
+- **Next.js** runs on `https://0.0.0.0:3000` with a self-signed cert that's
+  auto-generated on first `npm run dev` (see
+  `frontend/scripts/ensure-certs.mjs`). It covers `localhost` + every
+  non-loopback IPv4 the machine has, so the same cert works on the laptop
+  and on a phone over Wi-Fi. Certs live in `certs/` and are gitignored — each
+  teammate gets their own on first run, so the cert matches their LAN IP.
 - **Next.js reverse-proxies** `/api/*`, `/ws/*`, and `/audio/*` to FastAPI
   (see `frontend/next.config.ts`). That includes WebSockets — Next's built-in
   rewrite proxy handles the HTTP upgrade.
@@ -37,7 +40,10 @@ cd frontend && npm run dev     # frontend
 `run.py` is deliberately tiny — it starts uvicorn on `127.0.0.1:8000` with no
 SSL. The `dev` script in `frontend/package.json` runs
 `next dev -H 0.0.0.0 --experimental-https --experimental-https-key …
---experimental-https-cert …`, pointing at the shared cert in `certs/`.
+--experimental-https-cert …`, pointing at the generated cert in `certs/`. A
+`predev` step runs `scripts/ensure-certs.mjs` first so the cert always exists
+before Next starts. Cert generation is pure Node (`selfsigned` npm package),
+so Windows machines don't need openssl.
 
 ## Directory layout
 
@@ -111,13 +117,14 @@ incident it created; the operator side just navigates to it.
 
 ## Env / config
 
-- Backend reads `.env` via `python-dotenv`. Relevant keys: `GEMINI_API_KEY`,
-  `GEMINI_MODEL`, `MAX_TOKENS`, `DB_PATH`, `MAX_CHANNEL_HISTORY`
-  (see `server/config.py`).
-- Frontend reads `frontend/.env.local`. By default this is empty — set
-  `NEXT_PUBLIC_API_URL` only if you want to point the browser at a different
-  origin (skipping the rewrite proxy), or `BACKEND_URL` to point the rewrite
-  proxy at a different backend host.
+- Backend: copy `.env.example` → `.env` and fill in `GEMINI_API_KEY`. Other
+  keys (`GEMINI_MODEL`, `MAX_TOKENS`, `DB_PATH`, `MAX_CHANNEL_HISTORY`) have
+  sensible defaults — see `server/config.py`.
+- Frontend: no env file needed by default. `frontend/.env.example` documents
+  the two optional overrides — `NEXT_PUBLIC_API_URL` (point the browser at a
+  different origin, skipping the rewrite proxy) and `BACKEND_URL` (point the
+  rewrite proxy at a different backend host). Copy to `.env.local` if you need
+  them.
 
 ## Gotchas worth knowing
 
