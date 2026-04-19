@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -10,13 +11,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { ChevronLeft } from "lucide-react";
 import type { UnitType } from "@/lib/types";
 
-const UNIT_TYPES: { value: UnitType; label: string }[] = [
+const UNIT_TYPES: { value: UnitType; label: string; short?: string }[] = [
   { value: "engine", label: "Engine" },
   { value: "ladder", label: "Ladder" },
   { value: "medic", label: "Medic" },
-  { value: "battalion_chief", label: "Battalion Chief" },
+  { value: "battalion_chief", label: "Battalion", short: "BC" },
   { value: "division", label: "Division" },
   { value: "command", label: "Command" },
   { value: "safety", label: "Safety" },
@@ -52,56 +54,62 @@ export default function RegisterPage() {
   const needsNumber = !["command", "staging"].includes(unitType);
 
   return (
-    <div className="p-4 space-y-4">
-      <header>
-        <h1 className="text-xl font-semibold">Register Unit</h1>
-        <p className="text-xs text-muted-foreground">Pick your unit type and number.</p>
+    <div className="flex flex-col gap-4 p-4 pt-[max(1rem,env(safe-area-inset-top))]">
+      <header className="flex items-center gap-2">
+        <Link href="/responder">
+          <Button variant="ghost" size="icon" aria-label="Back">
+            <ChevronLeft className="size-5" />
+          </Button>
+        </Link>
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold tracking-tight">Register Unit</h1>
+          <p className="text-xs text-muted-foreground">Pick your unit type and number.</p>
+        </div>
       </header>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Unit info</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Unit type</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Unit type</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {UNIT_TYPES.map((t) => (
-                <Button
-                  key={t.value}
-                  type="button"
-                  variant={unitType === t.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setUnitType(t.value)}
-                >
-                  {t.label}
-                </Button>
-              ))}
-            </div>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-2 gap-2">
+            {UNIT_TYPES.map((t) => (
+              <Button
+                key={t.value}
+                type="button"
+                variant={unitType === t.value ? "default" : "outline"}
+                className="h-12 text-sm"
+                onClick={() => setUnitType(t.value)}
+              >
+                {t.label}
+              </Button>
+            ))}
           </div>
 
           {needsNumber && (
             <div className="space-y-2">
-              <Label htmlFor="num">Unit number</Label>
+              <Label htmlFor="num" className="text-sm">Unit number</Label>
               <Input
                 id="num"
+                inputMode="numeric"
                 placeholder="e.g. 7, A, 12"
                 value={unitNumber}
                 onChange={(e) => setUnitNumber(e.target.value)}
                 autoComplete="off"
+                className="h-12 text-base"
               />
             </div>
           )}
-
-          <Button
-            className="w-full"
-            disabled={register.isPending || (needsNumber && !unitNumber.trim())}
-            onClick={() => register.mutate()}
-          >
-            {register.isPending ? "Registering…" : "Register"}
-          </Button>
         </CardContent>
       </Card>
+
+      <Button
+        className="w-full h-12 text-base"
+        disabled={register.isPending || (needsNumber && !unitNumber.trim())}
+        onClick={() => register.mutate()}
+      >
+        {register.isPending ? "Registering…" : "Register"}
+      </Button>
     </div>
   );
 }
