@@ -162,6 +162,30 @@ export const api = {
       { method: "POST", json: payload },
     ),
 
+  // --- LiveKit (voice transport) ---
+  getLivekitToken: (params: {
+    incidentId: string;
+    channelId: string;
+    unitId: string;
+    callsign: string;
+    canPublish?: boolean;
+    canSubscribe?: boolean;
+  }) =>
+    request<{ url: string; token: string; room: string }>(
+      "/api/livekit/token",
+      {
+        method: "POST",
+        json: {
+          incident_id: params.incidentId,
+          channel_id: params.channelId,
+          unit_id: params.unitId,
+          callsign: params.callsign,
+          can_publish: params.canPublish ?? true,
+          can_subscribe: params.canSubscribe ?? true,
+        },
+      },
+    ),
+
   // --- Timeline / search ---
   getTimeline: (incidentId: string) =>
     request<Communication[]>(`/api/incidents/${incidentId}/timeline`),

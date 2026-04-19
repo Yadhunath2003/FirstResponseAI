@@ -49,14 +49,5 @@ class ConnectionManager:
             return len(self.active_connections[incident_id])
         return 0
 
-    def get_peers(self, incident_id: str, exclude_unit: str | None = None) -> list[str]:
-        """List of connected unit IDs on an incident, optionally excluding one."""
-        if incident_id not in self.active_connections:
-            return []
-        return [
-            uid for uid in self.active_connections[incident_id].keys()
-            if uid != exclude_unit
-        ]
-
 # Global instance
 ws_manager = ConnectionManager()

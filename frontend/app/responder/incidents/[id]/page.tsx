@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useIncidentSocket } from "@/lib/ws";
-import { useIncidentVoice } from "@/lib/use-incident-voice";
+import { useChannelRoom } from "@/lib/use-channel-room";
 import { startPTT, type PTTHandle } from "@/lib/audio";
 import type { WSMessage, ChannelId } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -44,6 +44,10 @@ function defaultChannelFor(unitType: string | null): ChannelId {
   }
 }
 
+// Max time a responder can hold the mic open before auto-release. Guards
+// against stuck PTT that would jam the talkgroup.
+const STUCK_MIC_MS = 30_000;
+
 export default function ResponderIncidentPage({
   params,
 }: {
@@ -54,34 +58,31 @@ export default function ResponderIncidentPage({
   const { unitId, callsign, unitType } = useSession();
 
   const initialChannel = useMemo(() => defaultChannelFor(unitType), [unitType]);
-  const [broadcastChannel, setBroadcastChannel] = useState<ChannelId>(initialChannel);
-  const [talkingChannel, setTalkingChannel] = useState<ChannelId | null>(null);
+  // tunedChannel = the talkgroup we're listening on and will transmit into.
+  const [tunedChannel, setTunedChannel] = useState<ChannelId>(initialChannel);
+  const [keyed, setKeyed] = useState(false);
   const [micState, setMicState] = useState<TileState>("idle");
   const [interim, setInterim] = useState("");
 
   const handleRef = useRef<PTTHandle | null>(null);
+  const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Socket send() is wired below; the voice hook gets a stable send via ref.
-  const sendRef = useRef<(msg: object) => boolean>(() => false);
-  const voice = useIncidentVoice({
+  // One LiveKit room per tuned channel. Changing tunedChannel drives a
+  // disconnect+reconnect under the hood (~few hundred ms blip — acceptable
+  // for a responder switching talkgroups).
+  const room = useChannelRoom({
+    incidentId,
+    channelId: tunedChannel,
     unitId,
-    send: (msg) => sendRef.current(msg),
+    callsign,
     enabled: true,
-    receiveOnly: false,
+    canPublish: true,
   });
-
-  const voiceRef = useRef(voice);
-  useEffect(() => {
-    voiceRef.current = voice;
-  }, [voice]);
 
   const handleMessage = useCallback(
     (msg: WSMessage) => {
-      voiceRef.current.onWsMessage(msg);
       switch (msg.type) {
         case "audio":
-          // Live audio already played via WebRTC mesh. Just refresh the
-          // timeline so the transcript/clip shows up.
           qc.invalidateQueries({ queryKey: ["timeline", incidentId] });
           break;
         case "summary_update":
@@ -102,14 +103,11 @@ export default function ResponderIncidentPage({
     [qc, incidentId],
   );
 
-  const { status: wsStatus, send } = useIncidentSocket({
+  const { status: wsStatus } = useIncidentSocket({
     incidentId,
     unitId,
     onMessage: handleMessage,
   });
-  useEffect(() => {
-    sendRef.current = send;
-  }, [send]);
 
   const incident = useQuery({
     queryKey: ["incident", incidentId],
@@ -129,94 +127,102 @@ export default function ResponderIncidentPage({
     refetchInterval: 15_000,
   });
 
-  const stopTalking = useCallback(
-    async (channel: ChannelId) => {
-      voice.transmit(false);
-      const h = handleRef.current;
-      if (!h || !unitId) {
-        setMicState("idle");
-        setTalkingChannel(null);
-        return;
-      }
-      handleRef.current = null;
-      setMicState("sending");
-      try {
-        const result = await h.stop();
-        // Background upload — don't block UI on network.
-        api
-          .postVoice({
-            channelId: channel,
-            transcript: result.transcript,
-            unitId,
-            incidentId,
-            audioBlob: result.blob,
-            audioFilename: `${Date.now()}.${result.extension}`,
-          })
-          .then(() => qc.invalidateQueries({ queryKey: ["timeline", incidentId] }))
-          .catch((err) =>
-            toast.error(err instanceof Error ? err.message : "Voice send failed"),
-          );
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Voice send failed");
-      } finally {
-        setInterim("");
-        setTalkingChannel(null);
-        setMicState("idle");
-      }
-    },
-    [unitId, incidentId, qc, voice],
-  );
+  const stopTalking = useCallback(async () => {
+    if (stuckTimerRef.current) {
+      clearTimeout(stuckTimerRef.current);
+      stuckTimerRef.current = null;
+    }
+    await room.setMicEnabled(false);
+    setKeyed(false);
 
-  const startTalking = useCallback(
-    async (channel: ChannelId) => {
-      const stream = voice.getMicStream();
-      if (!stream) {
-        toast.error("Microphone not ready yet");
-        return;
-      }
-      setMicState("starting");
-      setTalkingChannel(channel);
-      try {
-        // Live audio begins the moment we unmute the outbound track.
-        voice.transmit(true);
-        // In parallel: capture for storage/transcript/AI.
-        handleRef.current = await startPTT({ onInterim: setInterim, stream });
-        setMicState("recording");
-      } catch (err) {
-        voice.transmit(false);
-        const m = err instanceof Error ? err.message : String(err);
-        toast.error(`Microphone error: ${m}`);
-        handleRef.current = null;
-        setTalkingChannel(null);
-        setMicState("idle");
-      }
-    },
-    [voice],
-  );
+    const h = handleRef.current;
+    handleRef.current = null;
+    if (!h || !unitId) {
+      setMicState("idle");
+      setInterim("");
+      return;
+    }
+
+    // Keep the UI responsive: background the upload and let the operator
+    // re-key the mic immediately.
+    setMicState("idle");
+    setInterim("");
+    try {
+      const result = await h.stop();
+      api
+        .postVoice({
+          channelId: tunedChannel,
+          transcript: result.transcript,
+          unitId,
+          incidentId,
+          audioBlob: result.blob,
+          audioFilename: `${Date.now()}.${result.extension}`,
+        })
+        .then(() => qc.invalidateQueries({ queryKey: ["timeline", incidentId] }))
+        .catch((err) =>
+          toast.error(err instanceof Error ? err.message : "Voice send failed"),
+        );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Voice send failed");
+    }
+  }, [room, unitId, incidentId, tunedChannel, qc]);
+
+  const startTalking = useCallback(async () => {
+    if (!room.connected) {
+      toast.error("Channel not connected yet");
+      return;
+    }
+    setMicState("starting");
+    try {
+      await room.setMicEnabled(true);
+      setKeyed(true);
+
+      // Reuse LiveKit's mic track for the transcript recorder so we don't
+      // prompt for permission a second time or fight for the device.
+      const stream = room.getLocalStream();
+      handleRef.current = await startPTT({
+        onInterim: setInterim,
+        stream: stream ?? undefined,
+      });
+      setMicState("recording");
+
+      // Stuck-mic guard.
+      stuckTimerRef.current = setTimeout(() => {
+        toast.warning("Mic auto-released (30s limit)");
+        stopTalking();
+      }, STUCK_MIC_MS);
+    } catch (err) {
+      await room.setMicEnabled(false).catch(() => {});
+      setKeyed(false);
+      const m = err instanceof Error ? err.message : String(err);
+      toast.error(`Microphone error: ${m}`);
+      handleRef.current = null;
+      setMicState("idle");
+    }
+  }, [room, stopTalking]);
 
   const onTileTap = useCallback(
     async (channel: ChannelId) => {
-      voice.unlockAudio();
-      if (micState === "starting" || micState === "sending") return;
-      setBroadcastChannel(channel);
+      if (micState === "starting") return;
 
-      if (talkingChannel === channel) {
-        await stopTalking(channel);
+      // Tapping a different channel tunes to it. If currently keyed, release
+      // the mic first so we don't transmit into the wrong talkgroup during
+      // the reconnect window.
+      if (channel !== tunedChannel) {
+        if (keyed) await stopTalking();
+        setTunedChannel(channel);
         return;
       }
-      if (talkingChannel && talkingChannel !== channel) {
-        const prev = talkingChannel;
-        await stopTalking(prev);
-        await startTalking(channel);
-        return;
-      }
-      await startTalking(channel);
+      // Same channel tapped: toggle transmit.
+      if (keyed) await stopTalking();
+      else await startTalking();
     },
-    [micState, talkingChannel, stopTalking, startTalking, voice],
+    [micState, tunedChannel, keyed, stopTalking, startTalking],
   );
 
   useEffect(() => {
     return () => {
+      if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
       handleRef.current?.stop().catch(() => {});
       handleRef.current = null;
     };
@@ -229,6 +235,14 @@ export default function ResponderIncidentPage({
     ],
     [incident.data],
   );
+
+  // Who (if anyone) is currently keyed on our tuned channel, for the busy UI.
+  const activeTalker = useMemo(() => {
+    if (!room.speakers.length) return null;
+    // Prefer a remote speaker label; skip ourselves.
+    const remote = room.speakers.find((id) => id !== unitId);
+    return remote ?? null;
+  }, [room.speakers, unitId]);
 
   if (!unitId) {
     return (
@@ -247,7 +261,7 @@ export default function ResponderIncidentPage({
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-[10px]">
-            {voice.peerCount} live
+            {room.participantCount} on {tunedChannel}
           </Badge>
           <ConnectionBadge status={wsStatus} />
         </div>
@@ -265,7 +279,8 @@ export default function ResponderIncidentPage({
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-sm">Channels</CardTitle>
               <span className="text-[10px] text-muted-foreground">
-                Broadcast on: <span className="font-medium">{broadcastChannel}</span>
+                Tuned: <span className="font-medium">{tunedChannel}</span>
+                {!room.connected && " · connecting…"}
               </span>
             </CardHeader>
             <CardContent>
@@ -275,14 +290,10 @@ export default function ResponderIncidentPage({
                     key={c.id}
                     label={c.label}
                     desc={c.desc}
-                    isTuned={broadcastChannel === c.id}
-                    state={talkingChannel === c.id ? micState : "idle"}
+                    isTuned={tunedChannel === c.id}
+                    state={tunedChannel === c.id && keyed ? micState : "idle"}
                     unread={0}
-                    disabled={
-                      !voice.micReady ||
-                      micState === "starting" ||
-                      micState === "sending"
-                    }
+                    disabled={micState === "starting"}
                     onTap={() => onTileTap(c.id)}
                   />
                 ))}
@@ -291,9 +302,13 @@ export default function ResponderIncidentPage({
           </Card>
 
           <p className="text-[10px] text-muted-foreground text-center">
-            Tap a channel to start talking live. Tap again to stop.{" "}
-            {voice.micReady ? "" : "Waiting for mic…"}
+            Tap a different channel to tune in. Tap your tuned channel to key the mic.
           </p>
+          {activeTalker && !keyed && (
+            <p className="text-xs text-center text-destructive font-medium">
+              ● {activeTalker} on air
+            </p>
+          )}
           {interim && (
             <p className="text-xs text-center text-muted-foreground italic">
               “{interim}”
@@ -315,8 +330,6 @@ export default function ResponderIncidentPage({
             <IncidentMap center={center} zones={zones.data ?? []} interactive />
           </div>
         </TabsContent>
-
-
       </Tabs>
 
       <footer className="border-t p-2 flex items-center justify-between text-[10px] text-muted-foreground">

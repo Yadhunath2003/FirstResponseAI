@@ -17,10 +17,29 @@ Write it as a single cohesive paragraph that gives full situational awareness
 in 10 seconds of reading. Update the summary to reflect the latest information.
 Output ONLY the summary text, no JSON, no labels."""
 
-CONFLICT_PROMPT = """Review these emergency communications across channels. Identify any
-contradictions, conflicts, or safety concerns. Examples: one channel reports building
-cleared while another reports patients found inside; a unit assigned to two locations;
-an evacuation order not acknowledged. If no conflicts found, respond with empty array.
+CONFLICT_PROMPT = """Review these emergency communications. Flag ONLY concrete factual
+contradictions or operational safety problems that an incident commander must resolve.
+
+WHAT COUNTS as a conflict (flag these):
+  - Contradictory factual claims: one unit reports building cleared, another reports
+    patients still inside.
+  - Conflicting orders: incident command sends units to two incompatible assignments,
+    or gives an order that contradicts a previously acknowledged one.
+  - A unit assigned to two locations or two tasks at the same time.
+  - An evacuation / MAYDAY / all-clear order that was never acknowledged.
+  - A resource request that was refused AND later reported as fulfilled, or vice versa.
+
+WHAT DOES NOT COUNT (NEVER flag these):
+  - Multiple units transmitting on different channels at the same time. That is
+    normal radio operation — every channel is independent and simultaneous traffic
+    across Command / Logistics / Comms / Triage is expected, not a conflict.
+  - Talk-over or overlapping speech on the same channel. Not a factual contradiction.
+  - Units choosing which channel to talk on. There is no "channel discipline" rule
+    to enforce here.
+  - Normal radio brevity, incomplete sentences, or terse acknowledgments.
+  - Anything you are not highly confident is a real, actionable contradiction.
+
+If no conflicts meeting the above criteria are found, respond with an empty array.
 Respond as JSON: { "conflicts": [{ "description": "string", "severity": "critical|high|medium", "channels_involved": ["string"], "units_involved": ["string"] }] }"""
 
 MAP_SUGGESTION_PROMPT = """Based on this emergency communication, determine if any map zone changes

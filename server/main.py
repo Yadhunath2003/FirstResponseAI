@@ -1,6 +1,9 @@
 import os
 import aiofiles
 from contextlib import asynccontextmanager
+from datetime import timedelta
+
+from livekit import api as lk_api
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form, File, UploadFile
 from fastapi.staticfiles import StaticFiles
@@ -18,9 +21,15 @@ from server.storage.database import (
     store_summary,
 )
 from server.ai.claude import search_history, parse_dispatch_call, geocode_address, generate_initial_summary
+from server.config import LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL
 
 
 channel_manager = ChannelManager()
+
+
+def _livekit_room_name(incident_id: str, channel_id: str) -> str:
+    # Room identity is the talkgroup: one per (incident, channel).
+    return f"incident:{incident_id}:channel:{channel_id}"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -210,6 +219,59 @@ async def regenerate_initial_summary(incident_id: str, payload: dict | None = No
     print(f"[regenerate] Summary stored for {incident_id}: {summary[:120]}…")
     return {"summary_text": summary}
 
+# --- LIVEKIT TOKEN ---
+
+@app.post("/api/livekit/token")
+async def issue_livekit_token(payload: dict):
+    """Mint a short-lived JWT for a single (incident, channel) room.
+
+    Body: {
+      incident_id: str, channel_id: str, unit_id: str, callsign: str,
+      can_publish?: bool,   # default true; dashboard sends false for listen-only
+      can_subscribe?: bool, # default true
+    }
+    Returns: { url, token, room } — client connects with livekit-client.
+    """
+    if not (LIVEKIT_API_KEY and LIVEKIT_API_SECRET and LIVEKIT_URL):
+        return JSONResponse(
+            status_code=503,
+            content={"error": "LiveKit not configured. Set LIVEKIT_URL/API_KEY/API_SECRET."},
+        )
+
+    incident_id = payload.get("incident_id")
+    channel_id = payload.get("channel_id")
+    unit_id = payload.get("unit_id")
+    callsign = payload.get("callsign") or unit_id or "unknown"
+    if not (incident_id and channel_id and unit_id):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "incident_id, channel_id, unit_id required"},
+        )
+
+    can_publish = bool(payload.get("can_publish", True))
+    can_subscribe = bool(payload.get("can_subscribe", True))
+
+    room = _livekit_room_name(incident_id, channel_id)
+    grant = lk_api.VideoGrants(
+        room=room,
+        room_join=True,
+        can_publish=can_publish,
+        can_subscribe=can_subscribe,
+        can_publish_data=True,
+    )
+    # identity must be unique per connection; participant name is the human label.
+    token = (
+        lk_api.AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
+        .with_identity(unit_id)
+        .with_name(callsign)
+        .with_grants(grant)
+        # 6h TTL — long enough for a shift, short enough to limit blast radius.
+        .with_ttl(timedelta(hours=6))
+        .to_jwt()
+    )
+    return {"url": LIVEKIT_URL, "token": token, "room": room}
+
+
 # --- CHANNELS & VOICE ---
 
 @app.get("/api/incidents/{incident_id}/channels")
@@ -388,41 +450,15 @@ async def search_incident_history(incident_id: str, payload: dict):
 
 @app.websocket("/ws/{incident_id}/{unit_id}")
 async def websocket_endpoint(websocket: WebSocket, incident_id: str, unit_id: str):
-    import json as _json
+    # The WS is now purely the incident event bus (zones, summary, dispatch,
+    # unit_joined, conflicts). Voice transport is LiveKit.
     await ws_manager.connect(incident_id, unit_id, websocket)
-
-    # Tell the new peer who is already here, then announce them to the others.
-    await ws_manager.send_to_unit(incident_id, unit_id, {
-        "type": "peers",
-        "peer_ids": ws_manager.get_peers(incident_id, exclude_unit=unit_id),
-    })
-    await ws_manager.broadcast_to_incident(incident_id, {
-        "type": "peer_joined",
-        "peer_id": unit_id,
-    }, exclude_unit=unit_id)
-
     try:
         while True:
-            raw = await websocket.receive_text()
-            try:
-                msg = _json.loads(raw)
-            except Exception:
-                continue
-            # WebRTC signaling relay: clients send {type:"signal", to:"<peer>", data:{...}}
-            if msg.get("type") == "signal":
-                target = msg.get("to")
-                data = msg.get("data")
-                if target and data is not None:
-                    await ws_manager.send_to_unit(incident_id, target, {
-                        "type": "signal",
-                        "from": unit_id,
-                        "data": data,
-                    })
+            # Clients don't need to push anything through this channel today;
+            # drain and ignore so the socket stays open.
+            await websocket.receive_text()
     except WebSocketDisconnect:
         pass
     finally:
         ws_manager.disconnect(incident_id, unit_id)
-        await ws_manager.broadcast_to_incident(incident_id, {
-            "type": "peer_left",
-            "peer_id": unit_id,
-        })
