@@ -25,29 +25,34 @@ export function PTTButton({
 }: PTTButtonProps) {
   const [state, setState] = useState<State>("idle");
   const handleRef = useRef<PTTHandle | null>(null);
+  const stateRef = useRef<State>("idle");
 
-  const start = useCallback(async () => {
-    if (state !== "idle" || disabled) return;
-    setState("starting");
+  const setStateSync = (s: State) => {
+    stateRef.current = s;
+    setState(s);
+  };
+
+  const start = useCallback(async (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (stateRef.current !== "idle" || disabled) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setStateSync("starting");
     try {
       handleRef.current = await startPTT({ onInterim });
-      setState("recording");
+      setStateSync("recording");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Microphone error: ${msg}`);
-      setState("idle");
+      setStateSync("idle");
     }
-  }, [state, disabled, onInterim]);
+  }, [disabled, onInterim]);
 
   const stop = useCallback(async () => {
-    if (state !== "recording" || !handleRef.current) {
-      if (state === "starting") {
-        // User released before the recorder finished starting. Wait then stop.
-        setTimeout(stop, 50);
-      }
+    if (stateRef.current === "starting") {
+      setTimeout(stop, 50);
       return;
     }
-    setState("sending");
+    if (stateRef.current !== "recording" || !handleRef.current) return;
+    setStateSync("sending");
     try {
       const result = await handleRef.current.stop();
       handleRef.current = null;
@@ -55,11 +60,10 @@ export function PTTButton({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Voice send failed");
     } finally {
-      setState("idle");
+      setStateSync("idle");
     }
-  }, [state, onResult]);
+  }, [onResult]);
 
-  const busy = state !== "idle";
   const active = state === "recording" || state === "starting";
 
   return (
@@ -68,13 +72,10 @@ export function PTTButton({
       disabled={disabled}
       onPointerDown={(e) => {
         e.preventDefault();
-        start();
+        start(e);
       }}
       onPointerUp={stop}
-      onPointerLeave={(e) => {
-        if (state === "recording") stop();
-        e.currentTarget.releasePointerCapture?.(e.pointerId);
-      }}
+      onPointerLeave={stop}
       onPointerCancel={stop}
       onContextMenu={(e) => e.preventDefault()}
       className={cn(
@@ -94,7 +95,13 @@ export function PTTButton({
           <MicOff className="size-7" />
         )}
         <span className="text-[10px] uppercase tracking-wide">
-          {state === "recording" ? "Recording" : state === "sending" ? "Sending" : busy ? "…" : label}
+          {state === "recording"
+            ? "Recording"
+            : state === "sending"
+              ? "Sending"
+              : state === "starting"
+                ? "…"
+                : label}
         </span>
       </div>
     </button>
