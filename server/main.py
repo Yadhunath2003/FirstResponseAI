@@ -15,8 +15,9 @@ from server.storage.database import (
     create_map_zone, get_map_zones, get_latest_summary, get_pending_suggestions,
     resolve_suggestion, get_recent_communications,
     get_pending_dispatch, delete_pending_dispatch,
+    store_summary,
 )
-from server.ai.claude import search_history, parse_dispatch_call, geocode_address
+from server.ai.claude import search_history, parse_dispatch_call, geocode_address, generate_initial_summary
 
 
 channel_manager = ChannelManager()
@@ -51,6 +52,21 @@ async def get_all_incidents():
 @app.post("/api/incidents")
 async def create_new_incident(inc: IncidentCreate):
     incident_id = create_incident(inc.name, inc.incident_type, inc.location_name, inc.location_lat, inc.location_lng)
+    print(f"[create] Incident {incident_id}: {inc.name}")
+
+    try:
+        initial_summary = await generate_initial_summary({
+            "incident_type": inc.incident_type,
+            "address": inc.location_name,
+            "location_display": inc.location_name,
+            "description": inc.name,
+        })
+        if initial_summary:
+            store_summary(incident_id, initial_summary, 0)
+            print(f"[create] Initial summary stored: {initial_summary[:120]}…")
+    except Exception as e:
+        print(f"[create] Initial summary generation failed: {e}")
+
     return get_incident(incident_id)
 
 @app.get("/api/incidents/{incident_id}")
@@ -126,7 +142,7 @@ async def dispatch_parse_endpoint(payload: dict):
 
 @app.post("/api/dispatch/confirm")
 async def dispatch_confirm_endpoint(payload: dict):
-    parsed = payload.get("parsed", {})
+    parsed = payload.get("parsed", payload)
 
     incident_type = parsed.get("incident_type", "other")
     address = parsed.get("address") or "Unknown Location"
@@ -139,7 +155,58 @@ async def dispatch_confirm_endpoint(payload: dict):
         lat=parsed.get("location_lat") or 0.0,
         lng=parsed.get("location_lng") or 0.0,
     )
+    print(f"[dispatch] Created incident {incident_id}: {incident_name}")
+
+    try:
+        initial_summary = await generate_initial_summary(parsed)
+        if initial_summary:
+            store_summary(incident_id, initial_summary, 0)
+            print(f"[dispatch] Initial summary stored ({len(initial_summary)} chars): {initial_summary[:120]}…")
+            from datetime import datetime, timezone
+            await ws_manager.broadcast_to_incident(incident_id, {
+                "type": "summary_update",
+                "summary_text": initial_summary,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+        else:
+            print("[dispatch] generate_initial_summary returned empty string")
+    except Exception as e:
+        print(f"[dispatch] Initial summary generation failed: {e}")
+
     return get_incident(incident_id)
+
+
+@app.post("/api/incidents/{incident_id}/regenerate-summary")
+async def regenerate_initial_summary(incident_id: str, payload: dict | None = None):
+    """Regenerate an initial-style summary for an existing incident.
+
+    Useful for incidents created before the initial-summary feature existed,
+    or when the intake fields have been edited. Falls back to the stored
+    incident row if the client doesn't send fresh form data.
+    """
+    inc = get_incident(incident_id)
+    if not inc:
+        return JSONResponse(status_code=404, content={"error": "Not Found"})
+
+    data = dict(payload or {})
+    data.setdefault("incident_type", inc.get("incident_type", "other"))
+    data.setdefault("address", inc.get("location_name"))
+    data.setdefault("location_display", inc.get("location_name"))
+    data.setdefault("description", inc.get("name"))
+
+    summary = await generate_initial_summary(data)
+    if not summary:
+        return JSONResponse(status_code=500, content={"error": "Summary generation returned empty"})
+
+    store_summary(incident_id, summary, 0)
+    from datetime import datetime, timezone
+    await ws_manager.broadcast_to_incident(incident_id, {
+        "type": "summary_update",
+        "summary_text": summary,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    print(f"[regenerate] Summary stored for {incident_id}: {summary[:120]}…")
+    return {"summary_text": summary}
 
 # --- CHANNELS & VOICE ---
 
