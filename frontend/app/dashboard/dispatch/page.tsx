@@ -98,6 +98,7 @@ export default function DispatchPage() {
                   <button
                     key={t.value}
                     type="button"
+                    suppressHydrationWarning
                     onClick={() => setParsed((p) => ({ ...p, incident_type: t.value }))}
                     className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors text-left
                       ${parsed.incident_type === t.value
@@ -119,6 +120,7 @@ export default function DispatchPage() {
                   <button
                     key={p.value}
                     type="button"
+                    suppressHydrationWarning
                     onClick={() => setParsed((prev) => ({ ...prev, priority: p.value }))}
                     className={`flex-1 rounded-md border px-2 py-2 text-xs font-semibold transition-colors
                       ${parsed.priority === p.value
@@ -305,7 +307,7 @@ function LocationSearch({
           placeholder="Search address — press Enter"
           autoFocus
         />
-        <Button variant="outline" size="sm" disabled={loading} onClick={search}>
+        <Button variant="outline" size="sm" disabled={loading} suppressHydrationWarning onClick={search}>
           <Search className="size-3.5" />
         </Button>
       </div>
@@ -315,6 +317,7 @@ function LocationSearch({
             <li key={`${r.lat}-${r.lon}`}>
               <button
                 type="button"
+                suppressHydrationWarning
                 className="w-full text-left p-2 text-xs hover:bg-muted"
                 onClick={() => {
                   onPick(parseFloat(r.lat), parseFloat(r.lon), r.display_name, r.display_name);

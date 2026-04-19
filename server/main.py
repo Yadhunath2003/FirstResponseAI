@@ -52,10 +52,6 @@ app.mount("/public_media", StaticFiles(directory="data/public_media"), name="pub
 @app.post("/api/register")
 async def register_unit_endpoint(reg: UnitRegistration):
     callsign = f"{reg.unit_type.replace('_', ' ').title()} {reg.unit_number}"
-    if reg.unit_type.lower() == "command":
-        callsign = "Command"
-    if reg.unit_type.lower() == "staging":
-        callsign = "Staging"
     
     unit_id = register_unit(callsign, reg.unit_type, reg.unit_number, reg.device_id)
     return {"unit_id": unit_id, "callsign": callsign}

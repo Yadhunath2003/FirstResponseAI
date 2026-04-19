@@ -3,13 +3,13 @@ from typing import List, Optional
 
 # Unit registration
 class UnitRegistration(BaseModel):
-    unit_type: str       # "engine", "ladder", "medic", "battalion_chief", "division", "command", "safety", "staging"
+    unit_type: str       # "medics", "fireman", "police", "rescue"
     unit_number: str     # "7", "3", "A", etc.
     device_id: str
 
 class UnitInfo(BaseModel):
     unit_id: str
-    callsign: str        # "Engine 7", "Medic 3", "Division A"
+    callsign: str        # "Medics 7", "Fireman 3", "Police A"
     unit_type: str
     unit_number: str
     device_id: str

@@ -14,21 +14,18 @@ import { toast } from "sonner";
 import { ChevronLeft } from "lucide-react";
 import type { UnitType } from "@/lib/types";
 
-const UNIT_TYPES: { value: UnitType; label: string; short?: string }[] = [
-  { value: "engine", label: "Engine" },
-  { value: "ladder", label: "Ladder" },
-  { value: "medic", label: "Medic" },
-  { value: "battalion_chief", label: "Battalion", short: "BC" },
-  { value: "division", label: "Division" },
-  { value: "command", label: "Command" },
-  { value: "safety", label: "Safety" },
-  { value: "staging", label: "Staging" },
+
+const UNIT_TYPES: { value: UnitType; label: string }[] = [
+  { value: "medics", label: "Medics" },
+  { value: "fireman", label: "Fireman" },
+  { value: "police", label: "Police" },
+  { value: "rescue", label: "Rescue" },
 ];
 
 export default function RegisterPage() {
   const router = useRouter();
   const { deviceId, setUnit } = useSession();
-  const [unitType, setUnitType] = useState<UnitType>("engine");
+  const [unitType, setUnitType] = useState<UnitType>("medics");
   const [unitNumber, setUnitNumber] = useState("");
 
   const register = useMutation({
@@ -51,7 +48,7 @@ export default function RegisterPage() {
     onError: (err) => toast.error(`Registration failed: ${err.message}`),
   });
 
-  const needsNumber = !["command", "staging"].includes(unitType);
+  const needsNumber = true; // All unit types now need a number
 
   return (
     <div className="flex flex-col gap-4 p-4 pt-[max(1rem,env(safe-area-inset-top))]">

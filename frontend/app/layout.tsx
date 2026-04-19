@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { Navigation } from "@/components/navigation";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,6 +42,7 @@ export default function RootLayout({
         className="bg-background text-foreground min-h-full flex flex-col"
         suppressHydrationWarning
       >
+        <Navigation />
         <Providers>{children}</Providers>
       </body>
     </html>
