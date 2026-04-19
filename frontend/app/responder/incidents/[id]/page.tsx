@@ -177,7 +177,7 @@ export default function ResponderIncidentPage({
 
         <TabsContent value="intel" className="flex-1 flex flex-col overflow-hidden">
           <div className="p-4 border-b shrink-0">
-            <SummaryPanel summary={incident.data?.summary ?? ""} />
+            <SummaryPanel summary={incident.data?.summary ?? ""} initialSummary={incident.data?.initial_summary} />
           </div>
           <div className="flex-1 overflow-hidden">
             <Timeline comms={timeline.data ?? []} />

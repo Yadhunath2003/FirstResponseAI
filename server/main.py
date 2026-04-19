@@ -12,7 +12,7 @@ from server.realtime.websocket import ws_manager
 from server.storage.database import (
     init_db, create_incident, get_incidents,
     get_incident, register_unit, join_incident, get_unit, get_units_for_incident,
-    create_map_zone, get_map_zones, get_latest_summary, get_pending_suggestions,
+    create_map_zone, get_map_zones, get_latest_summary, get_initial_summary, get_pending_suggestions,
     resolve_suggestion, get_recent_communications,
     get_pending_dispatch, delete_pending_dispatch,
     store_summary,
@@ -77,7 +77,9 @@ async def get_incident_details(incident_id: str):
     
     inc["units"] = get_units_for_incident(incident_id)
     summary = get_latest_summary(incident_id)
+    initial = get_initial_summary(incident_id)
     inc["summary"] = summary["summary_text"] if summary else "No summary available."
+    inc["initial_summary"] = initial["summary_text"] if initial else None
     inc["recent_comms"] = get_recent_communications(incident_id, 10)
     return inc
 
