@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getWsBase } from "./env";
 import type { WSMessage } from "./types";
 
@@ -15,6 +15,8 @@ export interface UseIncidentSocketOptions {
 
 // Opens ws://HOST/ws/{incidentId}/{unitId} with auto-reconnect.
 // Caller passes onMessage for side effects; status is returned for UI.
+// `send` lets other hooks push messages back through the same socket
+// (used by the WebRTC mesh for signaling).
 export function useIncidentSocket({
   incidentId,
   unitId,
@@ -74,5 +76,16 @@ export function useIncidentSocket({
     };
   }, [incidentId, unitId, enabled]);
 
-  return { status, socket: wsRef };
+  const send = useCallback((msg: object) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    try {
+      ws.send(JSON.stringify(msg));
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  return { status, socket: wsRef, send };
 }

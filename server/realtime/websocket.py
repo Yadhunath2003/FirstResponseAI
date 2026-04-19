@@ -27,14 +27,16 @@ class ConnectionManager:
                 except Exception:
                     self.disconnect(incident_id, unit_id)
 
-    async def broadcast_to_incident(self, incident_id: str, message: dict):
-        """Broadcast to all units connected to this incident"""
+    async def broadcast_to_incident(self, incident_id: str, message: dict, exclude_unit: str | None = None):
+        """Broadcast to all units connected to this incident, optionally skipping one."""
         if incident_id not in self.active_connections:
             return
-            
+
         payload = json.dumps(message)
         dead = []
         for unit_id, ws in self.active_connections[incident_id].items():
+            if exclude_unit and unit_id == exclude_unit:
+                continue
             try:
                 await ws.send_text(payload)
             except Exception:
@@ -46,6 +48,15 @@ class ConnectionManager:
         if incident_id in self.active_connections:
             return len(self.active_connections[incident_id])
         return 0
+
+    def get_peers(self, incident_id: str, exclude_unit: str | None = None) -> list[str]:
+        """List of connected unit IDs on an incident, optionally excluding one."""
+        if incident_id not in self.active_connections:
+            return []
+        return [
+            uid for uid in self.active_connections[incident_id].keys()
+            if uid != exclude_unit
+        ]
 
 # Global instance
 ws_manager = ConnectionManager()

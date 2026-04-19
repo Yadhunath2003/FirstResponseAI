@@ -1,11 +1,12 @@
 "use client";
 
-import { use, useCallback, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useIncidentSocket } from "@/lib/ws";
+import { useIncidentVoice } from "@/lib/use-incident-voice";
 import type { WSMessage } from "@/lib/types";
 import { buttonVariants } from "@/components/ui/button";
 import { Button } from "@/components/ui/button";
@@ -57,8 +58,25 @@ export default function DashboardIncidentPage({
     refetchInterval: 10_000,
   });
 
+  const operatorUnitId = useMemo(() => `operator-${deviceId.slice(0, 8)}`, [deviceId]);
+
+  // Receive-only WebRTC mesh: dashboard joins every peer connection but
+  // publishes no mic track. Live audio plays automatically via remote streams.
+  const sendRef = useRef<(msg: object) => boolean>(() => false);
+  const voice = useIncidentVoice({
+    unitId: operatorUnitId,
+    send: (msg) => sendRef.current(msg),
+    enabled: true,
+    receiveOnly: true,
+  });
+  const voiceRef = useRef(voice);
+  useEffect(() => {
+    voiceRef.current = voice;
+  }, [voice]);
+
   const handleMessage = useCallback(
     (msg: WSMessage) => {
+      voiceRef.current.onWsMessage(msg);
       switch (msg.type) {
         case "audio":
           qc.invalidateQueries({ queryKey: ["timeline", incidentId] });
@@ -87,11 +105,14 @@ export default function DashboardIncidentPage({
   );
 
   // Operator uses the deviceId as the "unit" for WS identity.
-  const { status: wsStatus } = useIncidentSocket({
+  const { status: wsStatus, send } = useIncidentSocket({
     incidentId,
-    unitId: `operator-${deviceId.slice(0, 8)}`,
+    unitId: operatorUnitId,
     onMessage: handleMessage,
   });
+  useEffect(() => {
+    sendRef.current = send;
+  }, [send]);
 
   const resolve = useMutation({
     mutationFn: ({ id, action }: { id: string; action: "accept" | "reject" }) =>
@@ -141,6 +162,9 @@ export default function DashboardIncidentPage({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={voice.unlockAudio} title="Enable live audio">
+            🔊 Live ({voice.peerCount})
+          </Button>
           <Badge variant="outline">{incident.data?.incident_type ?? "—"}</Badge>
           <Badge variant={incident.data?.status === "active" ? "default" : "secondary"}>
             {incident.data?.status ?? "—"}
