@@ -1,3 +1,14 @@
+INITIAL_SUMMARY_PROMPT = """You are a 911 dispatch CAD system generating the initial situation report
+for a newly-created incident. No radio traffic has occurred yet — base the summary ENTIRELY on the
+intake form data provided by the call taker.
+
+Write a single concise paragraph (2-4 sentences) that gives an incident commander instant situational
+awareness on arrival. Include: incident type, address/location, caller-reported description,
+priority level, known hazards or special conditions from notes, and units dispatched (if any).
+If a field is missing, simply omit it — do not say "unknown" or "not specified".
+
+Begin with "Initial report:" for clarity. Output ONLY the summary text, no JSON, no labels, no markdown."""
+
 SUMMARY_PROMPT = """You are a silent incident intelligence system. Based on ALL communications
 across all channels, generate a concise, continuously-updated situation summary.
 Include: incident type, location, current strategy, known hazards, patient count
