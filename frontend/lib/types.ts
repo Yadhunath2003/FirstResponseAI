@@ -135,6 +135,41 @@ export interface DispatchParsed {
   location_display: string | null;
 }
 
+// --- Public / community feed ---
+
+export type PublicPostKind = "awareness" | "comment" | "help" | "need";
+export type PublicHelpType = "ride" | "shelter" | "supplies" | "safe" | "check" | "other";
+
+export interface PublicIncident {
+  id: string;
+  name: string;
+  incident_type: string;
+  location_name: string | null;
+  location_lat: number | null;
+  location_lng: number | null;
+  status: string;
+  created_at: string;
+}
+
+export interface PublicIncidentDetail extends PublicIncident {
+  summary: string;
+  help_counts: Record<string, number>;
+}
+
+export interface PublicPost {
+  id: string;
+  incident_id: string | null;
+  parent_id: string | null;
+  kind: PublicPostKind;
+  help_type: PublicHelpType | null;
+  author_name: string;
+  body: string | null;
+  media_url: string | null;
+  lat: number | null;
+  lng: number | null;
+  created_at: string;
+}
+
 // WebSocket message union (server -> client)
 export type WSMessage =
   | { type: "audio"; channel_id: string; unit_callsign: string; audio_url: string; transcript: string; timestamp: string; id?: string }
@@ -144,6 +179,7 @@ export type WSMessage =
   | { type: "zones_refresh" }
   | { type: "conflict"; description: string; severity: string; channels_involved: string[]; units_involved: string[] }
   | { type: "unit_joined"; unit_callsign: string; unit_type: string }
+  | { type: "public_post"; post: PublicPost }
   | {
       type: "dispatched";
       incident_id: string;
