@@ -16,8 +16,8 @@ export function SummaryPanel({ summary, initialSummary, updatedAt }: SummaryPane
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Sparkles className="size-4" /> AI Summary
+        <CardTitle className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Incident Summary
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-auto space-y-3">

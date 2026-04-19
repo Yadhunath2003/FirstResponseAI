@@ -99,7 +99,13 @@ export default function LeafletMap({
             key={z.id}
             center={[z.center_lat, z.center_lng]}
             radius={radius}
-            pathOptions={{ color, fillColor: color, fillOpacity: 0.2, weight: 2 }}
+            pathOptions={{
+              color,
+              fillColor: color,
+              fillOpacity: 0.08,
+              weight: 1.5,
+              dashArray: "5 4",
+            }}
           >
             <Popup>
               <strong>{z.label || z.zone_type}</strong>

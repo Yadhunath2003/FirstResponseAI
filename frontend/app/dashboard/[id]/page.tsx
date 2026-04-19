@@ -4,21 +4,82 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { audioUrl } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useIncidentSocket } from "@/lib/ws";
 import { useChannelRoom } from "@/lib/use-channel-room";
 import type { ChannelId, WSMessage } from "@/lib/types";
-import { buttonVariants } from "@/components/ui/button";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { IncidentMap } from "@/components/incident-map";
-import { SummaryPanel } from "@/components/summary-panel";
-import { Timeline } from "@/components/timeline";
-import { ConnectionBadge } from "@/components/connection-badge";
-import { ArrowLeft, Search, Sparkles, Users, Radio } from "lucide-react";
+import { ArrowLeft, Search, Radio, Wifi, WifiOff } from "lucide-react";
 import { toast } from "sonner";
+
+const CHANNEL_BADGE = {
+  command: {
+    hot: "border-red-500/55 bg-red-500/20 text-red-400",
+    cold: "border-red-500/40 bg-[#111] text-zinc-500",
+    chip: "border-red-500/35 text-red-300",
+    dot: "bg-red-500",
+  },
+  triage: {
+    hot: "border-amber-500/55 bg-amber-500/20 text-amber-400",
+    cold: "border-amber-500/40 bg-[#111] text-zinc-500",
+    chip: "border-amber-500/35 text-amber-300",
+    dot: "bg-amber-500",
+  },
+  logistics: {
+    hot: "border-blue-500/55 bg-blue-500/20 text-blue-400",
+    cold: "border-blue-500/40 bg-[#111] text-zinc-500",
+    chip: "border-blue-500/35 text-blue-300",
+    dot: "bg-blue-500",
+  },
+  comms: {
+    hot: "border-emerald-500/55 bg-emerald-500/20 text-emerald-400",
+    cold: "border-emerald-500/40 bg-[#111] text-zinc-500",
+    chip: "border-emerald-500/35 text-emerald-300",
+    dot: "bg-emerald-500",
+  },
+} as const;
+
+const ZONE_LEGEND = [
+  { label: "Danger", dot: "border-red-500 bg-red-500/30" },
+  { label: "Warm Zone", dot: "border-amber-500 bg-amber-500/30" },
+  { label: "Cold Zone", dot: "border-emerald-500 bg-emerald-500/30" },
+  { label: "Staging", dot: "border-purple-500 bg-purple-500/30" },
+  { label: "Landing", dot: "border-blue-500 bg-blue-500/30" },
+];
+
+function fmtIncidentType(value?: string) {
+  if (!value) return "Unknown";
+  return value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function fmtStatus(value?: string) {
+  if (!value) return "Unknown";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function fmtTime(value: string) {
+  return new Date(value).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+function zoneTone(zoneType?: string) {
+  const t = zoneType?.toLowerCase() ?? "";
+  if (t.includes("danger") || t.includes("hot") || t.includes("evac")) {
+    return "border-red-500/40 bg-red-500/12 text-red-400";
+  }
+  if (t.includes("warm")) return "border-amber-500/40 bg-amber-500/12 text-amber-400";
+  if (t.includes("cold") || t.includes("safe")) {
+    return "border-emerald-500/40 bg-emerald-500/12 text-emerald-400";
+  }
+  if (t.includes("staging")) return "border-purple-500/40 bg-purple-500/12 text-purple-400";
+  if (t.includes("landing")) return "border-blue-500/40 bg-blue-500/12 text-blue-400";
+  return "border-blue-500/40 bg-blue-500/12 text-blue-400";
+}
 
 export default function DashboardIncidentPage({
   params,
@@ -33,6 +94,7 @@ export default function DashboardIncidentPage({
   const [searchResults, setSearchResults] = useState<
     import("@/lib/types").Communication[] | null
   >(null);
+  const timelineEndRef = useRef<HTMLDivElement | null>(null);
 
   const incident = useQuery({
     queryKey: ["incident", incidentId],
@@ -80,13 +142,13 @@ export default function DashboardIncidentPage({
     incidentId, channelId: "logistics", unitId: operatorUnitId,
     callsign: "Dispatch", canPublish: false, enabled: true,
   });
-  const comms = useChannelRoom({
+  const commsRoom = useChannelRoom({
     incidentId, channelId: "comms", unitId: operatorUnitId,
     callsign: "Dispatch", canPublish: false, enabled: true,
   });
-  const rooms = { command, triage, logistics, comms } as const;
+  const rooms = { command, triage, logistics, comms: commsRoom } as const;
   const totalListeners = command.participantCount + triage.participantCount
-    + logistics.participantCount + comms.participantCount;
+    + logistics.participantCount + commsRoom.participantCount;
 
   const handleMessage = useCallback(
     (msg: WSMessage) => {
@@ -152,107 +214,176 @@ export default function DashboardIncidentPage({
     [incident.data],
   );
 
+  const timelineComms = searchResults ?? timeline.data ?? [];
+
+  useEffect(() => {
+    const parent = timelineEndRef.current?.parentElement;
+    if (!parent) return;
+    parent.scrollTop = parent.scrollHeight;
+  }, [timelineComms.length]);
+
+  const searching = search.isPending;
+  const aiUpdating = incident.isFetching || suggestions.isFetching || zones.isFetching;
+  const wsConnected = wsStatus === "connected";
+
   return (
-    <div className="flex flex-col h-[100dvh]">
-      <header className="p-3 border-b flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <Link
-            href="/dashboard"
-            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-          >
-            <ArrowLeft className="size-4" />
-          </Link>
-          <div className="min-w-0">
-            <h1 className="text-base font-semibold truncate">
-              {incident.data?.name ?? "Incident"}
-            </h1>
-            <p className="text-xs text-muted-foreground truncate">
-              {incident.data?.location_name ?? ""}
-            </p>
-          </div>
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#070707] text-zinc-100">
+      <header className="flex min-h-12 items-center gap-2 border-b border-[#1b1b1b] px-4 py-2">
+        <Link
+          href="/dashboard"
+          className="grid size-8 place-items-center rounded-md text-zinc-500 transition hover:bg-zinc-900"
+          aria-label="Back to dashboard"
+        >
+          <ArrowLeft className="size-4" />
+        </Link>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold text-zinc-100">
+            {incident.data?.name ?? "Incident"}
+          </p>
+          <p className="truncate text-[10px] text-zinc-500">
+            {incident.data?.location_name ?? ""}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            {channelIds.map((cid) => {
-              const r = rooms[cid];
-              const hot = r.speakers.length > 0;
-              return (
-                <Badge
-                  key={cid}
-                  variant={hot ? "destructive" : r.connected ? "secondary" : "outline"}
-                  className="text-[10px] capitalize"
-                  title={`${cid} · ${r.participantCount} on air${hot ? " · LIVE" : ""}`}
-                >
-                  {hot && <span className="mr-1">●</span>}
-                  {cid}
-                </Badge>
-              );
-            })}
-          </div>
-          <Badge variant="outline" className="text-[10px]">
+
+        <div className="hidden items-center gap-1.5 xl:flex">
+          {channelIds.map((cid) => {
+            const room = rooms[cid];
+            const hot = room.speakers.length > 0;
+            const palette = CHANNEL_BADGE[cid];
+            return (
+              <span
+                key={cid}
+                className={`rounded border px-2 py-1 text-[10px] uppercase tracking-[0.08em] ${hot ? palette.hot : palette.cold}`}
+                title={`${cid} · ${room.participantCount} on air${hot ? " · live" : ""}`}
+              >
+                {hot ? "LIVE " : ""}
+                {cid}
+              </span>
+            );
+          })}
+          <span className="rounded border border-[#1b1b1b] px-2 py-1 text-[10px] uppercase tracking-[0.08em] text-zinc-500">
             {totalListeners} units live
-          </Badge>
-          <Badge variant="outline">{incident.data?.incident_type ?? "—"}</Badge>
-          <Badge variant={incident.data?.status === "active" ? "default" : "secondary"}>
-            {incident.data?.status ?? "—"}
-          </Badge>
-          <DispatchButton
-            incidentId={incidentId}
-            incidentName={incident.data?.name ?? "Incident"}
-            units={incident.data?.units ?? []}
-            onOpenChange={setDispatchOpen}
+          </span>
+        </div>
+
+        <span className="hidden rounded border border-[#1b1b1b] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500 md:inline-flex">
+          {fmtIncidentType(incident.data?.incident_type)}
+        </span>
+        <span
+          className={`hidden rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] md:inline-flex ${incident.data?.status === "active" ? "border-emerald-500/55 text-emerald-400" : "border-[#1b1b1b] text-zinc-500"}`}
+        >
+          {fmtStatus(incident.data?.status)}
+        </span>
+
+        <DispatchButton
+          incidentId={incidentId}
+          incidentName={incident.data?.name ?? "Incident"}
+          units={incident.data?.units ?? []}
+          onOpenChange={setDispatchOpen}
+        />
+
+        <div className="flex items-center gap-1 rounded border border-[#1b1b1b] px-2 py-1">
+          <span
+            className={`size-2 rounded-full ${wsConnected ? "bg-emerald-500 shadow-[0_0_0_2px_rgba(34,197,94,0.2)]" : "bg-red-500"}`}
           />
-          <ConnectionBadge status={wsStatus} />
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
+            WS
+          </span>
+          {wsConnected ? <Wifi className="size-3 text-emerald-500" /> : <WifiOff className="size-3 text-red-500" />}
         </div>
       </header>
 
-      <div className="flex-1 grid grid-cols-12 gap-3 p-3 overflow-hidden">
-        {/* Map — large left */}
-        <section className="col-span-12 lg:col-span-7 rounded-md overflow-hidden border">
-          {!dispatchOpen && <IncidentMap center={center} zones={zones.data ?? []} />}
+      <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[1fr_280px_300px]">
+        <section className="relative min-h-[260px] overflow-hidden border-b border-[#1b1b1b] md:border-r md:border-b-0">
+          {!dispatchOpen && <IncidentMap center={center} zones={zones.data ?? []} interactive />}
+
+          <div className="pointer-events-none absolute bottom-12 left-3 flex flex-col gap-1.5 rounded-md border border-zinc-800 bg-black/80 p-2">
+            {ZONE_LEGEND.map((z) => (
+              <div key={z.label} className="flex items-center gap-2">
+                <span className={`size-2.5 rounded-full border border-dashed ${z.dot}`} />
+                <span className="text-[10px] text-zinc-400">
+                  {z.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </section>
 
-        {/* Right column: summary, units, suggestions */}
-        <aside className="col-span-12 lg:col-span-5 flex flex-col gap-3 min-h-0">
-          <div className="h-[32%] min-h-[160px]">
-            <SummaryPanel summary={incident.data?.summary ?? ""} initialSummary={incident.data?.initial_summary} />
+        <section className="flex min-h-0 flex-col gap-2 overflow-y-auto border-b border-[#1b1b1b] p-3 md:border-r md:border-b-0">
+          <div className={`overflow-hidden rounded-md border border-[#1b1b1b] bg-[#0d0d0d] ${aiUpdating ? "animate-pulse" : ""}`}>
+            <div className="flex items-center gap-2 border-b border-[#1b1b1b] px-3 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+                Incident Summary
+              </span>
+              {aiUpdating && (
+                <span className="ml-auto text-[9px] font-semibold tracking-[0.08em] text-blue-400">
+                  Refreshing...
+                </span>
+              )}
+            </div>
+            <div className="space-y-2 px-3 py-2.5">
+              {incident.data?.initial_summary && (
+                <div>
+                  <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-zinc-500">
+                    Initial Report
+                  </p>
+                  <p className="text-xs leading-5 text-zinc-300">{incident.data.initial_summary}</p>
+                </div>
+              )}
+              <div>
+                <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-zinc-500">
+                  Live Update
+                </p>
+                <p className="text-xs leading-5 text-zinc-300">
+                  {incident.data?.summary && incident.data.summary !== "No summary available."
+                    ? incident.data.summary
+                    : "No summary yet. Waiting for communications."}
+                </p>
+              </div>
+            </div>
           </div>
 
-          <Card className="h-[22%] min-h-[120px] flex flex-col">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Users className="size-4" /> Units ({incident.data?.units?.length ?? 0})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto">
+          <div className="overflow-hidden rounded-md border border-[#1b1b1b] bg-[#0d0d0d]">
+            <div className="flex items-center border-b border-[#1b1b1b] px-3 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+                Units ({incident.data?.units?.length ?? 0})
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5 px-3 py-2.5">
               {(incident.data?.units ?? []).length === 0 ? (
-                <p className="text-xs text-muted-foreground">No units joined yet.</p>
+                <p className="text-xs text-zinc-500">
+                  No units joined yet.
+                </p>
               ) : (
-                <ul className="flex flex-wrap gap-1">
-                  {incident.data!.units.map((u) => (
-                    <li key={u.id}>
-                      <Badge variant="secondary" className="text-[10px]">
-                        {u.callsign}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
+                incident.data!.units.map((u) => (
+                  <span
+                    key={u.id}
+                    className="rounded border border-red-500/40 bg-red-500/12 px-2 py-1 text-[11px] font-semibold text-red-200"
+                  >
+                    {u.callsign}
+                  </span>
+                ))
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Card className="flex-1 flex flex-col min-h-0">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Sparkles className="size-4" /> AI Suggestions
-                {(suggestions.data?.length ?? 0) > 0 && (
-                  <Badge className="ml-auto">{suggestions.data!.length}</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto space-y-2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-[#1b1b1b] bg-[#0d0d0d]">
+            <div className="flex items-center gap-2 border-b border-[#1b1b1b] px-3 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+                Zone Suggestions
+              </span>
+              {(suggestions.data?.length ?? 0) > 0 && (
+                <span className="ml-auto rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">
+                  {suggestions.data!.length}
+                </span>
+              )}
+            </div>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2.5">
               {(suggestions.data ?? []).length === 0 && (
-                <p className="text-xs text-muted-foreground">No pending suggestions.</p>
+                <p className="text-center text-xs text-zinc-500">
+                  No pending suggestions
+                </p>
               )}
               {suggestions.data?.map((s) => {
                 const data = s.data_json as {
@@ -260,86 +391,163 @@ export default function DashboardIncidentPage({
                   label?: string;
                   reason?: string;
                 };
+                const tone = zoneTone(data.zone_type);
                 return (
-                  <div key={s.id} className="rounded-md border p-2 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline">{data.zone_type ?? "zone"}</Badge>
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(s.created_at).toLocaleTimeString()}
+                  <div key={s.id} className="rounded-md border border-zinc-800 bg-[#0f0f0f] px-2.5 py-2">
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] ${tone}`}>
+                        {data.zone_type ?? "zone"}
                       </span>
+                      <span className="text-[10px] text-zinc-500">{fmtTime(s.created_at)}</span>
                     </div>
-                    <p className="text-xs">
-                      <strong>{data.label}</strong> — {data.reason}
+                    <p className="mb-2 text-xs leading-5 text-zinc-300">
+                      <span className="font-semibold text-zinc-100">{data.label ?? "Suggested zone"}</span> - {data.reason ?? "No reason provided."}
                     </p>
-                    <div className="flex gap-1">
-                      <Button
-                        size="xs"
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
                         onClick={() => resolve.mutate({ id: s.id, action: "accept" })}
                         disabled={resolve.isPending}
+                        className="flex-1 rounded border border-emerald-500/40 bg-emerald-500/12 px-2 py-1.5 text-[11px] font-semibold text-emerald-400 transition disabled:opacity-60"
                       >
                         Accept
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="outline"
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => resolve.mutate({ id: s.id, action: "reject" })}
                         disabled={resolve.isPending}
+                        className="flex-1 rounded border border-zinc-700 px-2 py-1.5 text-[11px] font-semibold text-zinc-300 transition hover:border-zinc-500 disabled:opacity-60"
                       >
                         Reject
-                      </Button>
+                      </button>
                     </div>
                   </div>
                 );
               })}
-            </CardContent>
-          </Card>
-        </aside>
-      </div>
-
-      {/* Timeline row */}
-      <section className="border-t h-[30%] min-h-[220px] flex flex-col">
-        <div className="p-2 border-b flex items-center gap-2">
-          <h2 className="text-sm font-medium mr-2">Timeline</h2>
-          <div className="flex-1 flex items-center gap-2 max-w-md">
-            <Input
-              placeholder="Search communications…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && searchQuery.trim()) search.mutate();
-              }}
-              className="h-7 text-xs"
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!searchQuery.trim() || search.isPending}
-              onClick={() => search.mutate()}
-            >
-              <Search className="size-3" />
-            </Button>
-            {searchResults && (
-              <Button size="sm" variant="ghost" onClick={() => setSearchResults(null)}>
-                Clear
-              </Button>
-            )}
+            </div>
           </div>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <Timeline comms={searchResults ?? timeline.data ?? []} />
-        </div>
-      </section>
+        </section>
+
+        <section className="flex min-h-0 flex-col overflow-hidden bg-[#070707]">
+          <div className="border-b border-[#1b1b1b] px-3 py-2">
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+                Communications
+              </span>
+              <span className="ml-auto text-[10px] text-zinc-500">{timelineComms.length} entries</span>
+            </div>
+            <div className="relative flex items-center gap-1.5">
+              <Search className="pointer-events-none absolute left-2 size-3 text-zinc-500" />
+              <input
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  if (e.target.value.trim().length === 0) setSearchResults(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && searchQuery.trim()) search.mutate();
+                }}
+                placeholder="Search transcript..."
+                className="w-full rounded border border-zinc-800 bg-[#0a0a0a] py-1.5 pl-7 pr-16 text-xs text-zinc-100 outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => search.mutate()}
+                disabled={!searchQuery.trim() || searching}
+                className="absolute right-8 rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-500 disabled:opacity-50"
+              >
+                Go
+              </button>
+              {searchResults && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchResults(null);
+                    setSearchQuery("");
+                  }}
+                  className="absolute right-2 text-xs text-zinc-500"
+                >
+                  x
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {timelineComms.length === 0 && (
+              <p className="px-4 py-3 text-xs text-zinc-500">
+                No communications yet.
+              </p>
+            )}
+            {timelineComms.map((c) => (
+              <CommEntry key={c.id} c={c} query={searchQuery} />
+            ))}
+            <div ref={timelineEndRef} />
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
 
+function CommEntry({
+  c,
+  query,
+}: {
+  c: import("@/lib/types").Communication;
+  query: string;
+}) {
+  const palette = CHANNEL_BADGE[c.channel_id as ChannelId] ?? CHANNEL_BADGE.command;
+
+  const renderHighlighted = (text: string) => {
+    const q = query.trim();
+    if (!q) return text;
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const splitRe = new RegExp(`(${escaped})`, "ig");
+    const matchRe = new RegExp(`^${escaped}$`, "i");
+    return text.split(splitRe).map((part, idx) =>
+      matchRe.test(part) ? (
+        <mark
+          key={`${c.id}-${idx}`}
+          className="rounded bg-blue-500/20 px-0.5 text-blue-400"
+        >
+          {part}
+        </mark>
+      ) : (
+        <span key={`${c.id}-${idx}`}>{part}</span>
+      ),
+    );
+  };
+
+  return (
+    <article className="border-b border-[#111] px-3 py-2.5">
+      <div className="mb-1 flex items-center gap-1.5">
+        <span className={`size-2 rounded-full ${palette.dot}`} />
+        <span className="text-[11px] font-semibold text-zinc-100">{c.unit_callsign}</span>
+        <span className={`rounded border bg-[#111] px-1.5 py-0.5 text-[10px] ${palette.chip}`}>
+          {c.channel_id}
+        </span>
+        <span className="ml-auto text-[10px] text-zinc-500">{fmtTime(c.timestamp)}</span>
+      </div>
+
+      {c.transcript && c.transcript !== "[no transcript]" && (
+        <p className="pl-3 text-xs leading-5 text-zinc-300">{renderHighlighted(c.transcript)}</p>
+      )}
+
+      {c.audio_path && (
+        <div className="mt-1.5 pl-3">
+          <audio controls src={audioUrl(c.audio_path)} className="h-7 w-full" />
+        </div>
+      )}
+    </article>
+  );
+}
+
 function DispatchButton({
-  incidentId,
   incidentName,
   units,
   onOpenChange,
 }: {
-  incidentId: string;
   incidentName: string;
   units: import("@/lib/types").Unit[];
   onOpenChange?: (open: boolean) => void;
@@ -365,35 +573,31 @@ function DispatchButton({
 
   return (
     <>
-      <Button
-        size="sm"
-        variant={dispatched ? "secondary" : "destructive"}
+      <button
+        type="button"
         onClick={() => setOpenWithCallback(true)}
-        className="gap-1.5"
+        className={`inline-flex items-center gap-1 rounded px-2.5 py-1.5 text-[11px] font-semibold text-white ${dispatched ? "border border-emerald-500/55 bg-[#1a2a1a]" : "border border-transparent bg-red-500"}`}
       >
         <Radio className="size-3.5" />
         {dispatched ? "Dispatched" : "Dispatch Units"}
-      </Button>
+      </button>
 
       {open && (
-        <div
-          className="fixed inset-0 flex items-center justify-center bg-black/60"
-          style={{ zIndex: 9999 }}
-        >
-          <div className="bg-background border rounded-lg p-6 w-full max-w-sm space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85">
+          <div className="w-full max-w-sm space-y-4 rounded-lg border border-zinc-700 bg-[#111] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.8)]">
             <h2 className="text-lg font-semibold">Dispatch Units</h2>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-zinc-500">
               Confirm dispatch of all units to{" "}
-              <span className="text-foreground font-medium">{incidentName}</span>.
+              <span className="font-medium text-zinc-100">{incidentName}</span>.
             </p>
             {units.length > 0 ? (
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Units on scene</p>
+                <p className="text-xs uppercase tracking-wide text-zinc-500">Units on scene</p>
                 <div className="flex flex-wrap gap-1">
                   {units.map((u) => (
-                    <Badge key={u.id} variant="outline" className="text-xs">
+                    <span key={u.id} className="rounded border border-red-500/40 bg-red-500/12 px-2 py-1 text-xs font-semibold text-red-200">
                       {u.callsign}
-                    </Badge>
+                    </span>
                   ))}
                 </div>
               </div>
@@ -401,12 +605,20 @@ function DispatchButton({
               <p className="text-xs text-amber-400">No units have joined yet.</p>
             )}
             <div className="flex gap-2 pt-2">
-              <Button className="flex-1" variant="destructive" onClick={handleDispatch}>
+              <button
+                type="button"
+                className="flex-1 rounded bg-red-500 px-3 py-2 text-sm font-semibold text-white"
+                onClick={handleDispatch}
+              >
                 Confirm Dispatch
-              </Button>
-              <Button className="flex-1" variant="outline" onClick={() => setOpenWithCallback(false)}>
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded border border-zinc-700 px-3 py-2 text-sm font-semibold text-zinc-500"
+                onClick={() => setOpenWithCallback(false)}
+              >
                 Cancel
-              </Button>
+              </button>
             </div>
           </div>
         </div>

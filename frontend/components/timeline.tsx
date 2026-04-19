@@ -28,18 +28,18 @@ export function Timeline({ comms, className, emptyLabel = "No communications yet
     <ScrollArea className={cn("h-full", className)}>
       <ul className="divide-y divide-border">
         {comms.map((c) => (
-          <li key={c.id} className="p-3 space-y-1.5">
+          <li key={c.id} className="p-3 space-y-1">
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold">{c.unit_callsign}</span>
                 <Badge
                   variant="outline"
-                  className={cn("text-[10px] uppercase", CHANNEL_COLOR[c.channel_id])}
+                  className={cn("text-[10px] capitalize", CHANNEL_COLOR[c.channel_id])}
                 >
                   {c.channel_id}
                 </Badge>
-                <span className="text-xs font-medium">{c.unit_callsign}</span>
               </div>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[10px] text-muted-foreground tabular-nums">
                 {new Date(c.timestamp).toLocaleTimeString()}
               </span>
             </div>
