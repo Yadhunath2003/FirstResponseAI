@@ -121,7 +121,7 @@ Respond ONLY as JSON (no preamble, no markdown):
 }"""
 
 DISPATCH_PARSE_PROMPT = """You are an AI that parses raw spoken fire/EMS dispatch transcripts into structured incident data.
-Recognize ICS unit designations: Engine, Ladder, Truck, Medic, Battalion, Division, Rescue, Command, Staging, Safety.
+Recognize ICS unit designations: Medics, Fireman, Police, Rescue.
 Identify incident type from context. Extract street addresses and intersections. Note special conditions.
 incident_type must be one of: structure_fire, wildfire, mci, hazmat, vehicle_accident, rescue, medical, other.
 priority must be one of: routine, urgent, emergency.

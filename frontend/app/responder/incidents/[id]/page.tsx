@@ -28,17 +28,12 @@ const CHANNELS: { id: ChannelId; label: string; desc: string }[] = [
 // Which channel a unit defaults to broadcasting on.
 function defaultChannelFor(unitType: string | null): ChannelId {
   switch (unitType) {
-    case "command":
-    case "battalion_chief":
-    case "division":
-    case "safety":
-      return "command";
-    case "medic":
+    case "medics":
       return "triage";
-    case "staging":
-      return "logistics";
-    case "engine":
-    case "ladder":
+    case "police":
+      return "command";
+    case "fireman":
+    case "rescue":
     default:
       return "comms";
   }

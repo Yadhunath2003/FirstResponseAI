@@ -13,20 +13,16 @@ import { toast } from "sonner";
 import type { UnitType } from "@/lib/types";
 
 const UNIT_TYPES: { value: UnitType; label: string }[] = [
-  { value: "engine", label: "Engine" },
-  { value: "ladder", label: "Ladder" },
-  { value: "medic", label: "Medic" },
-  { value: "battalion_chief", label: "Battalion Chief" },
-  { value: "division", label: "Division" },
-  { value: "command", label: "Command" },
-  { value: "safety", label: "Safety" },
-  { value: "staging", label: "Staging" },
+  { value: "medics", label: "Medics" },
+  { value: "fireman", label: "Fireman" },
+  { value: "police", label: "Police" },
+  { value: "rescue", label: "Rescue" },
 ];
 
 export default function RegisterPage() {
   const router = useRouter();
   const { deviceId, setUnit } = useSession();
-  const [unitType, setUnitType] = useState<UnitType>("engine");
+  const [unitType, setUnitType] = useState<UnitType>("medics");
   const [unitNumber, setUnitNumber] = useState("");
 
   const register = useMutation({
@@ -49,7 +45,7 @@ export default function RegisterPage() {
     onError: (err) => toast.error(`Registration failed: ${err.message}`),
   });
 
-  const needsNumber = !["command", "staging"].includes(unitType);
+  const needsNumber = true; // All unit types now need a number
 
   return (
     <div className="p-4 space-y-4">

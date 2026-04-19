@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+env/
 
 # Node / Next.js
 node_modules/
@@ -25,3 +26,4 @@ data/
 /TopSecret.md
 IMPROVEMENTS.md
 .claude
+package-lock.json

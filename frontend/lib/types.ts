@@ -2,14 +2,10 @@
 // Keep in sync with backend.
 
 export type UnitType =
-  | "engine"
-  | "ladder"
-  | "medic"
-  | "battalion_chief"
-  | "division"
-  | "command"
-  | "safety"
-  | "staging";
+  | "medics"
+  | "fireman"
+  | "police"
+  | "rescue";
 
 export type IncidentType =
   | "structure_fire"

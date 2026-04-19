@@ -25,6 +25,9 @@ const nextConfig: NextConfig = {
     ];
   },
   allowedDevOrigins: lanHosts(),
+  turbopack: {
+    root: process.cwd(),
+  },
 };
 
 export default nextConfig;
