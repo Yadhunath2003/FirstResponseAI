@@ -128,11 +128,10 @@ export default function ResponderIncidentPage({
       </header>
 
       <Tabs defaultValue="cards" className="flex-1 flex flex-col">
-        <TabsList className="w-full grid grid-cols-4 rounded-none border-b">
+        <TabsList className="w-full grid grid-cols-3 rounded-none border-b">
           <TabsTrigger value="cards">PTT</TabsTrigger>
-          <TabsTrigger value="summary">Summary</TabsTrigger>
+          <TabsTrigger value="intel">Intel</TabsTrigger>
           <TabsTrigger value="map">Map</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
 
         <TabsContent value="cards" className="flex-1 p-4 space-y-4">
@@ -176,8 +175,13 @@ export default function ResponderIncidentPage({
           </div>
         </TabsContent>
 
-        <TabsContent value="summary" className="flex-1 p-4">
-          <SummaryPanel summary={incident.data?.summary ?? ""} />
+        <TabsContent value="intel" className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-4 border-b shrink-0">
+            <SummaryPanel summary={incident.data?.summary ?? ""} />
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <Timeline comms={timeline.data ?? []} />
+          </div>
         </TabsContent>
 
         <TabsContent value="map" className="flex-1 p-0">
@@ -186,11 +190,7 @@ export default function ResponderIncidentPage({
           </div>
         </TabsContent>
 
-        <TabsContent value="timeline" className="flex-1 flex flex-col">
-          <div className="flex-1 overflow-hidden">
-            <Timeline comms={timeline.data ?? []} />
-          </div>
-        </TabsContent>
+
       </Tabs>
 
       <footer className="border-t p-2 flex items-center justify-between text-[10px] text-muted-foreground">
