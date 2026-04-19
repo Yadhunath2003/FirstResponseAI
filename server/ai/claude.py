@@ -77,6 +77,45 @@ async def generate_initial_summary(incident_data: dict) -> str:
     return header.strip()
 
 
+PUBLIC_CLOSE_SUMMARY_SYSTEM = (
+    "You write a short, plain-language post-incident summary for the general public. "
+    "Audience: residents reading a community safety feed. Rules: "
+    "(1) Under 120 words. "
+    "(2) No names, addresses, license plates, phone numbers, or other PII. "
+    "(3) No radio codes, unit callsigns, or jargon. "
+    "(4) State roughly what happened, how it was resolved, and whether the area is safe now. "
+    "(5) If you don't know something, omit it — do not invent. "
+    "(6) Calm, neutral tone. End with a one-line next-steps or reassurance sentence."
+)
+
+
+async def generate_public_close_summary(incident: dict, communications: list[dict]) -> str:
+    incident_line = (
+        f"Incident type: {incident.get('incident_type', 'unknown')}. "
+        f"Neighborhood: {incident.get('location_name') or 'area not specified'}."
+    )
+    if communications:
+        msgs = "\n".join(
+            f"[{c['timestamp']}] {c['channel_id'].upper()} ({c['unit_callsign']}): {c['transcript']}"
+            for c in reversed(communications)
+        )
+    else:
+        msgs = "No radio communications were recorded."
+
+    raw = await _ask(
+        PUBLIC_CLOSE_SUMMARY_SYSTEM,
+        f"{incident_line}\n\nRadio log (internal — redact before writing):\n{msgs}",
+    )
+    if raw and raw.strip():
+        return raw.strip()
+    itype = (incident.get("incident_type") or "incident").replace("_", " ")
+    loc = incident.get("location_name") or "the area"
+    return (
+        f"A {itype} in {loc} has been resolved. Responders have cleared the scene. "
+        "Thank you to neighbors who shared information. The area is considered safe."
+    )
+
+
 async def generate_summary(communications: list[dict]) -> str:
     if not communications:
         return "Waiting for communications..."

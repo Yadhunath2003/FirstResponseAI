@@ -68,6 +68,10 @@ export default function PublicIncidentPage({
         qc.invalidateQueries({ queryKey: ["public-thread", incidentId] });
         qc.invalidateQueries({ queryKey: ["public-incident", incidentId] });
       }
+      if (msg.type === "incident_closed") {
+        qc.invalidateQueries({ queryKey: ["public-incident", incidentId] });
+        qc.invalidateQueries({ queryKey: ["public-incidents"] });
+      }
     },
   });
 
@@ -147,7 +151,13 @@ export default function PublicIncidentPage({
         )}
 
         {incident.data && (
-          <Card>
+          <Card
+            className={
+              incident.data.status === "closed"
+                ? "border-emerald-500/40"
+                : undefined
+            }
+          >
             <CardHeader className="pb-2 flex flex-row items-start justify-between gap-3">
               <div className="space-y-1">
                 <CardTitle className="text-lg">{incident.data.name}</CardTitle>
@@ -155,13 +165,29 @@ export default function PublicIncidentPage({
                   {incident.data.location_name || incident.data.incident_type}
                 </p>
               </div>
-              <Badge variant="secondary" className="uppercase text-[10px]">
-                Official
-              </Badge>
+              <div className="flex items-center gap-1.5">
+                {incident.data.status === "closed" ? (
+                  <Badge className="uppercase text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/40">
+                    Resolved
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="uppercase text-[10px]">
+                    Official
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
-            <CardContent className="text-sm whitespace-pre-wrap">
-              {incident.data.summary ||
-                "Dispatcher summary not available yet."}
+            <CardContent className="text-sm whitespace-pre-wrap space-y-2">
+              {incident.data.status === "closed" && (
+                <p className="text-xs text-emerald-400">
+                  This incident has been resolved. Below is a public summary
+                  prepared at close-out.
+                </p>
+              )}
+              <p>
+                {incident.data.summary ||
+                  "Dispatcher summary not available yet."}
+              </p>
             </CardContent>
           </Card>
         )}

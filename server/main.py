@@ -19,10 +19,13 @@ from server.storage.database import (
     create_map_zone, get_map_zones, get_latest_summary, get_initial_summary, get_pending_suggestions,
     resolve_suggestion, get_recent_communications,
     get_pending_dispatch, delete_pending_dispatch,
-    store_summary,
+    store_summary, close_incident,
     create_public_post, get_public_thread, get_standalone_awareness_posts, get_help_counts,
 )
-from server.ai.claude import search_history, parse_dispatch_call, geocode_address, generate_initial_summary
+from server.ai.claude import (
+    search_history, parse_dispatch_call, geocode_address,
+    generate_initial_summary, generate_public_close_summary,
+)
 from server.config import LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL
 
 
@@ -187,6 +190,42 @@ async def dispatch_confirm_endpoint(payload: dict):
         print(f"[dispatch] Initial summary generation failed: {e}")
 
     return get_incident(incident_id)
+
+
+@app.post("/api/incidents/{incident_id}/close")
+async def close_incident_endpoint(incident_id: str, payload: dict | None = None):
+    """Close an incident, generate a public-facing wrap-up, broadcast it.
+
+    Pushes a `public_summary` field onto the incident (stored in metadata_json)
+    so the /public feed can show the aftermath. Also emits `incident_closed`
+    on the incident websocket for anyone viewing.
+    """
+    inc = get_incident(incident_id)
+    if not inc:
+        return JSONResponse(status_code=404, content={"error": "Not Found"})
+
+    comms = get_recent_communications(incident_id, limit=500)
+    try:
+        public_summary = await generate_public_close_summary(inc, comms)
+    except Exception as e:
+        print(f"[close] public summary generation failed: {e}")
+        public_summary = (
+            f"An incident in {inc.get('location_name') or 'the area'} has been resolved. "
+            "The scene is clear."
+        )
+
+    closed = close_incident(incident_id, public_summary=public_summary)
+    from datetime import datetime, timezone
+    await ws_manager.broadcast_to_incident(incident_id, {
+        "type": "incident_closed",
+        "incident_id": incident_id,
+        "public_summary": public_summary,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    return {
+        "incident": closed,
+        "public_summary": public_summary,
+    }
 
 
 @app.post("/api/incidents/{incident_id}/regenerate-summary")
@@ -456,6 +495,11 @@ PUBLIC_KINDS = {"awareness", "comment", "help", "need"}
 
 def _public_incident_view(inc: dict) -> dict:
     """Strip fields that shouldn't appear on the public map/feed."""
+    import json as _json
+    try:
+        meta = _json.loads(inc.get("metadata_json") or "{}")
+    except Exception:
+        meta = {}
     return {
         "id": inc["id"],
         "name": inc.get("name"),
@@ -465,6 +509,8 @@ def _public_incident_view(inc: dict) -> dict:
         "location_lng": inc.get("location_lng"),
         "status": inc.get("status"),
         "created_at": inc.get("created_at"),
+        "public_summary": meta.get("public_summary"),
+        "closed_at": meta.get("closed_at"),
     }
 
 
@@ -480,7 +526,23 @@ async def _save_public_media(media: UploadFile | None) -> str | None:
 
 @app.get("/api/public/incidents")
 async def public_list_incidents():
-    items = [_public_incident_view(i) for i in get_incidents() if i.get("status") == "active"]
+    """Active incidents + recently closed ones (within 72h) so the public
+    feed shows the aftermath once dispatch closes a call."""
+    from datetime import datetime, timezone, timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    items = []
+    for i in get_incidents():
+        view = _public_incident_view(i)
+        if view["status"] == "active":
+            items.append(view)
+            continue
+        closed_at = view.get("closed_at")
+        if closed_at:
+            try:
+                if datetime.fromisoformat(closed_at) >= cutoff:
+                    items.append(view)
+            except Exception:
+                items.append(view)
     return items
 
 
@@ -490,8 +552,13 @@ async def public_get_incident(incident_id: str, lang: str = "en"):
     if not inc:
         return JSONResponse(status_code=404, content={"error": "Not Found"})
     view = _public_incident_view(inc)
-    summary = get_latest_summary(incident_id) or get_initial_summary(incident_id)
-    summary_text = summary["summary_text"] if summary else ""
+    # For closed incidents, the curated public summary wins over live dispatch
+    # notes (those contain PII, radio codes, etc.).
+    if view.get("status") == "closed" and view.get("public_summary"):
+        summary_text = view["public_summary"]
+    else:
+        summary = get_latest_summary(incident_id) or get_initial_summary(incident_id)
+        summary_text = summary["summary_text"] if summary else ""
 
     if summary_text and lang and lang != "en":
         try:

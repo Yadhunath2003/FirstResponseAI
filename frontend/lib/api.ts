@@ -81,6 +81,12 @@ export const api = {
       json: { unit_id: unitId },
     }),
 
+  closeIncident: (incidentId: string) =>
+    request<{ incident: Incident; public_summary: string }>(
+      `/api/incidents/${incidentId}/close`,
+      { method: "POST", json: {} },
+    ),
+
   // --- Dispatch ---
   parseDispatch: (transcript: string) =>
     request<DispatchParsed>("/api/dispatch/parse", {

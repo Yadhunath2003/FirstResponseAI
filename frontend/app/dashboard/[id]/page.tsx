@@ -10,7 +10,7 @@ import { useIncidentSocket } from "@/lib/ws";
 import { useChannelRoom } from "@/lib/use-channel-room";
 import type { ChannelId, WSMessage } from "@/lib/types";
 import { IncidentMap } from "@/components/incident-map";
-import { ArrowLeft, Search, Radio, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, Search, Radio, Wifi, WifiOff, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 const CHANNEL_BADGE = {
@@ -174,6 +174,10 @@ export default function DashboardIncidentPage({
         case "conflict":
           toast.warning(`Conflict: ${(msg as { description?: string }).description}`);
           break;
+        case "incident_closed":
+          qc.invalidateQueries({ queryKey: ["incident", incidentId] });
+          qc.invalidateQueries({ queryKey: ["incidents"] });
+          break;
       }
     },
     [qc, incidentId],
@@ -205,6 +209,30 @@ export default function DashboardIncidentPage({
     onSuccess: (results) => setSearchResults(results),
     onError: (e) => toast.error(e.message),
   });
+
+  const close = useMutation({
+    mutationFn: () => api.closeIncident(incidentId),
+    onSuccess: ({ public_summary }) => {
+      toast.success("Incident closed — public summary pushed to community.", {
+        description: public_summary.slice(0, 160),
+      });
+      qc.invalidateQueries({ queryKey: ["incident", incidentId] });
+      qc.invalidateQueries({ queryKey: ["incidents"] });
+      qc.invalidateQueries({ queryKey: ["public-incidents"] });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const isClosed = incident.data?.status === "closed";
+
+  const handleClose = useCallback(() => {
+    if (isClosed) return;
+    const confirmed = window.confirm(
+      "Close this incident? A public-safe summary will be generated and pushed to the Community feed. This cannot be undone.",
+    );
+    if (!confirmed) return;
+    close.mutate();
+  }, [isClosed, close]);
 
   const center = useMemo<[number, number]>(
     () => [
@@ -282,6 +310,21 @@ export default function DashboardIncidentPage({
           units={incident.data?.units ?? []}
           onOpenChange={setDispatchOpen}
         />
+
+        <button
+          type="button"
+          onClick={handleClose}
+          disabled={isClosed || close.isPending}
+          className={`hidden md:inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition ${
+            isClosed
+              ? "border-[#1b1b1b] text-zinc-600 cursor-not-allowed"
+              : "border-emerald-500/55 text-emerald-400 hover:bg-emerald-500/10"
+          }`}
+          title={isClosed ? "Incident already closed" : "Close incident and push public summary"}
+        >
+          <CheckCircle2 className="size-3" />
+          {close.isPending ? "Closing…" : isClosed ? "Closed" : "Close"}
+        </button>
 
         <div className="flex items-center gap-1 rounded border border-[#1b1b1b] px-2 py-1">
           <span

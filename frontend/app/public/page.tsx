@@ -176,26 +176,42 @@ export default function PublicPage() {
               <p className="text-xs text-muted-foreground">Loading…</p>
             )}
             <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
-              {incidents.map((inc) => (
-                <Card
-                  key={inc.id}
-                  className="cursor-pointer hover:border-foreground/30 transition"
-                  onClick={() => open(inc.id)}
-                >
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm truncate">{inc.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0 text-xs text-muted-foreground flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1 truncate">
-                      <MapPin className="size-3" />
-                      {inc.location_name || "—"}
-                    </span>
-                    <span className="uppercase tracking-wide shrink-0">
-                      {inc.incident_type}
-                    </span>
-                  </CardContent>
-                </Card>
-              ))}
+              {incidents.map((inc) => {
+                const closed = inc.status === "closed";
+                return (
+                  <Card
+                    key={inc.id}
+                    className={`cursor-pointer hover:border-foreground/30 transition ${closed ? "opacity-80" : ""}`}
+                    onClick={() => open(inc.id)}
+                  >
+                    <CardHeader className="pb-2 flex flex-row items-start justify-between gap-2">
+                      <CardTitle className="text-sm truncate">{inc.name}</CardTitle>
+                      <Badge
+                        variant={closed ? "secondary" : "default"}
+                        className="text-[10px] uppercase shrink-0"
+                      >
+                        {closed ? "Resolved" : "Active"}
+                      </Badge>
+                    </CardHeader>
+                    <CardContent className="pt-0 text-xs text-muted-foreground space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1 truncate">
+                          <MapPin className="size-3" />
+                          {inc.location_name || "—"}
+                        </span>
+                        <span className="uppercase tracking-wide shrink-0">
+                          {inc.incident_type}
+                        </span>
+                      </div>
+                      {closed && inc.public_summary && (
+                        <p className="line-clamp-2 text-xs text-foreground/80">
+                          {inc.public_summary}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
               {incidents.length === 0 && !isLoading && (
                 <p className="text-xs text-muted-foreground">
                   No active incidents nearby.

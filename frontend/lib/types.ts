@@ -145,6 +145,8 @@ export interface PublicIncident {
   location_lng: number | null;
   status: string;
   created_at: string;
+  public_summary?: string | null;
+  closed_at?: string | null;
 }
 
 export interface PublicIncidentDetail extends PublicIncident {
@@ -176,6 +178,7 @@ export type WSMessage =
   | { type: "conflict"; description: string; severity: string; channels_involved: string[]; units_involved: string[] }
   | { type: "unit_joined"; unit_callsign: string; unit_type: string }
   | { type: "public_post"; post: PublicPost }
+  | { type: "incident_closed"; incident_id: string; public_summary: string; timestamp: string }
   | {
       type: "dispatched";
       incident_id: string;

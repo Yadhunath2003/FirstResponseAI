@@ -149,6 +149,33 @@ def get_incident(incident_id: str) -> dict | None:
     conn.close()
     return None
 
+def close_incident(incident_id: str, public_summary: str | None = None) -> dict | None:
+    """Mark an incident closed and attach an optional public-facing summary.
+
+    The public summary is stashed in metadata_json so we don't have to migrate
+    the existing schema. Returns the refreshed incident dict (or None if missing).
+    """
+    conn = _get_conn()
+    row = conn.execute("SELECT metadata_json FROM incidents WHERE id = ?", (incident_id,)).fetchone()
+    if not row:
+        conn.close()
+        return None
+    try:
+        meta = json.loads(row["metadata_json"] or "{}")
+    except Exception:
+        meta = {}
+    if public_summary is not None:
+        meta["public_summary"] = public_summary
+        meta["closed_at"] = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "UPDATE incidents SET status = 'closed', metadata_json = ? WHERE id = ?",
+        (json.dumps(meta), incident_id),
+    )
+    conn.commit()
+    conn.close()
+    return get_incident(incident_id)
+
+
 def get_active_incident() -> dict | None:
     conn = _get_conn()
     row = conn.execute("SELECT * FROM incidents WHERE status = 'active' ORDER BY created_at DESC LIMIT 1").fetchone()
