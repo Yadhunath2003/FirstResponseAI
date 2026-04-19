@@ -33,7 +33,7 @@ export function ChannelMicTile({
       disabled={disabled}
       onClick={onTap}
       className={cn(
-        "relative flex flex-col items-center justify-center gap-2 rounded-lg border-2 p-4 min-h-32 select-none touch-manipulation transition-all disabled:opacity-50",
+        "relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 p-4 min-h-36 select-none touch-manipulation transition-all disabled:opacity-50",
         active
           ? "bg-destructive text-destructive-foreground border-destructive ring-4 ring-destructive/30 scale-[1.02]"
           : isTuned
@@ -42,7 +42,7 @@ export function ChannelMicTile({
       )}
     >
       {isTuned && !active && (
-        <Radio className="absolute top-2 left-2 size-3 opacity-70" />
+        <Radio className="absolute top-2 left-2 size-3.5 opacity-80" />
       )}
       {unread > 0 && !active && (
         <span className="absolute top-1.5 right-1.5 min-w-5 h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center">
@@ -51,16 +51,16 @@ export function ChannelMicTile({
       )}
 
       {sending ? (
-        <Loader2 className="size-8 animate-spin" />
+        <Loader2 className="size-10 animate-spin" />
       ) : active ? (
-        <Mic className="size-8 animate-pulse" />
+        <Mic className="size-10 animate-pulse" />
       ) : (
-        <MicOff className="size-8" />
+        <MicOff className="size-9" />
       )}
 
-      <div className="flex flex-col items-center">
-        <span className="font-semibold text-sm">{label}</span>
-        <span className="text-[10px] opacity-75 leading-tight">
+      <div className="flex flex-col items-center text-center">
+        <span className="font-semibold text-base leading-tight">{label}</span>
+        <span className={cn("text-xs leading-tight mt-0.5", active ? "opacity-90 font-medium" : "opacity-75")}>
           {active ? "Tap to stop" : sending ? "Sending…" : desc}
         </span>
       </div>

@@ -16,6 +16,9 @@ import { SummaryPanel } from "@/components/summary-panel";
 import { IncidentMap } from "@/components/incident-map";
 import { ConnectionBadge } from "@/components/connection-badge";
 import { ChannelMicTile, type TileState } from "@/components/channel-mic-tile";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 
 const CHANNELS: { id: ChannelId; label: string; desc: string }[] = [
@@ -251,35 +254,42 @@ export default function ResponderIncidentPage({
   }
 
   return (
-    <div className="flex flex-col min-h-[100dvh]">
-      <header className="p-3 border-b flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h1 className="text-sm font-semibold truncate">{incident.data?.name ?? "Incident"}</h1>
-          <p className="text-[10px] text-muted-foreground truncate">
-            {callsign} · {incident.data?.location_name ?? ""}
-          </p>
+    <div className="flex flex-col h-dvh w-full max-w-full overflow-x-hidden">
+      <header className="border-b px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-1 min-w-0 flex-1">
+          <Link href="/responder/incidents" className="shrink-0">
+            <Button variant="ghost" size="icon" aria-label="Back" className="size-8 -ml-1">
+              <ChevronLeft className="size-5" />
+            </Button>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm font-semibold truncate leading-tight">{incident.data?.name ?? "Incident"}</h1>
+            <p className="text-[11px] text-muted-foreground truncate leading-tight">
+              {callsign} · {incident.data?.location_name ?? ""}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-[10px]">
-            {room.participantCount} on {tunedChannel}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Badge variant="outline" className="text-[11px] px-2">
+            {room.participantCount} · {tunedChannel}
           </Badge>
           <ConnectionBadge status={wsStatus} />
         </div>
       </header>
 
-      <Tabs defaultValue="cards" className="flex-1 flex flex-col">
-        <TabsList className="w-full grid grid-cols-3 rounded-none border-b">
-          <TabsTrigger value="cards">PTT</TabsTrigger>
-          <TabsTrigger value="intel">Intel</TabsTrigger>
-          <TabsTrigger value="map">Map</TabsTrigger>
+      <Tabs defaultValue="cards" className="flex-1 flex flex-col min-h-0 w-full gap-0">
+        <TabsList className="w-full grid grid-cols-3 rounded-none border-b h-11 shrink-0">
+          <TabsTrigger value="cards" className="text-sm">PTT</TabsTrigger>
+          <TabsTrigger value="intel" className="text-sm">Intel</TabsTrigger>
+          <TabsTrigger value="map" className="text-sm">Map</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="cards" className="flex-1 p-4 space-y-4">
+        <TabsContent value="cards" className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 m-0">
           <Card>
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
               <CardTitle className="text-sm">Channels</CardTitle>
-              <span className="text-[10px] text-muted-foreground">
-                Tuned: <span className="font-medium">{tunedChannel}</span>
+              <span className="text-[11px] text-muted-foreground truncate">
+                Tuned: <span className="font-medium text-foreground">{tunedChannel}</span>
                 {!room.connected && " · connecting…"}
               </span>
             </CardHeader>
@@ -301,43 +311,41 @@ export default function ResponderIncidentPage({
             </CardContent>
           </Card>
 
-          <p className="text-[10px] text-muted-foreground text-center">
-            Tap a different channel to tune in. Tap your tuned channel to key the mic.
+          <p className="text-[11px] text-muted-foreground text-center px-4 leading-relaxed">
+            Tap another channel to tune in. Tap your tuned channel to key the mic.
           </p>
           {activeTalker && !keyed && (
-            <p className="text-xs text-center text-destructive font-medium">
+            <p className="text-sm text-center text-destructive font-medium">
               ● {activeTalker} on air
             </p>
           )}
           {interim && (
-            <p className="text-xs text-center text-muted-foreground italic">
+            <p className="text-sm text-center text-muted-foreground italic px-4">
               “{interim}”
             </p>
           )}
         </TabsContent>
 
-        <TabsContent value="intel" className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-4 border-b shrink-0">
+        <TabsContent value="intel" className="flex-1 min-h-0 overflow-hidden flex flex-col m-0">
+          <div className="p-3 border-b shrink-0">
             <SummaryPanel summary={incident.data?.summary ?? ""} initialSummary={incident.data?.initial_summary} />
           </div>
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <Timeline comms={timeline.data ?? []} />
           </div>
         </TabsContent>
 
-        <TabsContent value="map" className="flex-1 p-0">
-          <div className="h-[calc(100dvh-130px)]">
-            <IncidentMap center={center} zones={zones.data ?? []} interactive />
-          </div>
+        <TabsContent value="map" className="flex-1 min-h-0 overflow-hidden m-0">
+          <IncidentMap center={center} zones={zones.data ?? []} interactive />
         </TabsContent>
       </Tabs>
 
-      <footer className="border-t p-2 flex items-center justify-between text-[10px] text-muted-foreground">
-        <span>
+      <footer className="border-t px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-center justify-between text-[11px] text-muted-foreground shrink-0">
+        <span className="truncate">
           {timeline.data?.length ?? 0} comms
           {zones.data && zones.data.length > 0 && ` · ${zones.data.length} zones`}
         </span>
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="text-[11px]">
           {incident.data?.status ?? "—"}
         </Badge>
       </footer>
