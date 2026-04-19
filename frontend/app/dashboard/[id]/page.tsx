@@ -17,7 +17,7 @@ import { IncidentMap } from "@/components/incident-map";
 import { SummaryPanel } from "@/components/summary-panel";
 import { Timeline } from "@/components/timeline";
 import { ConnectionBadge } from "@/components/connection-badge";
-import { ArrowLeft, Search, Sparkles, Users } from "lucide-react";
+import { ArrowLeft, Search, Sparkles, Users, Radio } from "lucide-react";
 import { toast } from "sonner";
 
 export default function DashboardIncidentPage({
@@ -25,6 +25,7 @@ export default function DashboardIncidentPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const [dispatchOpen, setDispatchOpen] = useState(false);
   const { id: incidentId } = use(params);
   const qc = useQueryClient();
   const { deviceId } = useSession();
@@ -168,6 +169,12 @@ export default function DashboardIncidentPage({
           <Badge variant={incident.data?.status === "active" ? "default" : "secondary"}>
             {incident.data?.status ?? "—"}
           </Badge>
+          <DispatchButton
+            incidentId={incidentId}
+            incidentName={incident.data?.name ?? "Incident"}
+            units={incident.data?.units ?? []}
+            onOpenChange={setDispatchOpen}
+          />
           <ConnectionBadge status={wsStatus} />
         </div>
       </header>
@@ -175,13 +182,13 @@ export default function DashboardIncidentPage({
       <div className="flex-1 grid grid-cols-12 gap-3 p-3 overflow-hidden">
         {/* Map — large left */}
         <section className="col-span-12 lg:col-span-7 rounded-md overflow-hidden border">
-          <IncidentMap center={center} zones={zones.data ?? []} />
+          {!dispatchOpen && <IncidentMap center={center} zones={zones.data ?? []} />}
         </section>
 
         {/* Right column: summary, units, suggestions */}
         <aside className="col-span-12 lg:col-span-5 flex flex-col gap-3 min-h-0">
           <div className="h-[32%] min-h-[160px]">
-            <SummaryPanel summary={incident.data?.summary ?? ""} />
+            <SummaryPanel summary={incident.data?.summary ?? ""} initialSummary={incident.data?.initial_summary} />
           </div>
 
           <Card className="h-[22%] min-h-[120px] flex flex-col">
@@ -296,5 +303,87 @@ export default function DashboardIncidentPage({
         </div>
       </section>
     </div>
+  );
+}
+
+function DispatchButton({
+  incidentId,
+  incidentName,
+  units,
+  onOpenChange,
+}: {
+  incidentId: string;
+  incidentName: string;
+  units: import("@/lib/types").Unit[];
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [dispatched, setDispatched] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const setOpenWithCallback = (val: boolean) => {
+    setOpen(val);
+    onOpenChange?.(val);
+  };
+
+  const handleDispatch = () => {
+    setDispatched(true);
+    setOpenWithCallback(false);
+    toast.success(`Units dispatched to ${incidentName}`, {
+      description: units.length > 0
+        ? `${units.map((u) => u.callsign).join(", ")} are en route.`
+        : "Awaiting unit assignment.",
+      duration: 6000,
+    });
+  };
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant={dispatched ? "secondary" : "destructive"}
+        onClick={() => setOpenWithCallback(true)}
+        className="gap-1.5"
+      >
+        <Radio className="size-3.5" />
+        {dispatched ? "Dispatched" : "Dispatch Units"}
+      </Button>
+
+      {open && (
+        <div
+          className="fixed inset-0 flex items-center justify-center bg-black/60"
+          style={{ zIndex: 9999 }}
+        >
+          <div className="bg-background border rounded-lg p-6 w-full max-w-sm space-y-4 shadow-xl">
+            <h2 className="text-lg font-semibold">Dispatch Units</h2>
+            <p className="text-sm text-muted-foreground">
+              Confirm dispatch of all units to{" "}
+              <span className="text-foreground font-medium">{incidentName}</span>.
+            </p>
+            {units.length > 0 ? (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Units on scene</p>
+                <div className="flex flex-wrap gap-1">
+                  {units.map((u) => (
+                    <Badge key={u.id} variant="outline" className="text-xs">
+                      {u.callsign}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-amber-400">No units have joined yet.</p>
+            )}
+            <div className="flex gap-2 pt-2">
+              <Button className="flex-1" variant="destructive" onClick={handleDispatch}>
+                Confirm Dispatch
+              </Button>
+              <Button className="flex-1" variant="outline" onClick={() => setOpenWithCallback(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

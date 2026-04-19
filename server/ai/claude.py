@@ -6,7 +6,7 @@ from server.config import GEMINI_API_KEY, GEMINI_MODEL, ELEVENLABS_API_KEY
 from server.channels.prompts import (
     SUMMARY_PROMPT, CONFLICT_PROMPT, MAP_SUGGESTION_PROMPT, SEARCH_PROMPT,
     TRIAGE_PROMPT, COMMAND_PROMPT, LOGISTICS_PROMPT, COMMS_PROMPT,
-    DISPATCH_PARSE_PROMPT,
+    DISPATCH_PARSE_PROMPT, INITIAL_SUMMARY_PROMPT,
 )
 
 genai.configure(api_key=GEMINI_API_KEY)
@@ -33,6 +33,48 @@ def _parse_json(raw: str | None) -> dict | None:
     except Exception:
         pass
     return None
+
+
+async def generate_initial_summary(incident_data: dict) -> str:
+    """Generate a dispatcher-style initial report from intake form data.
+
+    Called once at incident creation, before any radio communications exist.
+    Falls back to a deterministic template if Gemini is unavailable.
+    """
+    fields = []
+    if incident_data.get("incident_type"):
+        fields.append(f"Incident type: {incident_data['incident_type'].replace('_', ' ')}")
+    if incident_data.get("priority"):
+        fields.append(f"Priority: {incident_data['priority']}")
+    if incident_data.get("address") or incident_data.get("location_display"):
+        fields.append(f"Location: {incident_data.get('location_display') or incident_data.get('address')}")
+    if incident_data.get("description"):
+        fields.append(f"Description: {incident_data['description']}")
+    if incident_data.get("notes"):
+        fields.append(f"Caller notes: {incident_data['notes']}")
+    units = incident_data.get("units_mentioned") or []
+    if units:
+        fields.append(f"Units dispatched: {', '.join(units)}")
+
+    content = "\n".join(fields) if fields else "No intake details provided."
+    raw = await _ask(INITIAL_SUMMARY_PROMPT, f"Intake form data:\n{content}")
+
+    if raw and raw.strip():
+        return raw.strip()
+
+    parts = []
+    if incident_data.get("incident_type"):
+        parts.append(incident_data["incident_type"].replace("_", " ").title())
+    if incident_data.get("location_display") or incident_data.get("address"):
+        parts.append(f"at {incident_data.get('location_display') or incident_data['address']}")
+    if incident_data.get("priority"):
+        parts.append(f"({incident_data['priority']} priority)")
+    header = "Initial report: " + " ".join(parts) if parts else "Initial report: incident created."
+    if incident_data.get("description"):
+        header += f" {incident_data['description']}"
+    if incident_data.get("notes"):
+        header += f" Caller notes: {incident_data['notes']}"
+    return header.strip()
 
 
 async def generate_summary(communications: list[dict]) -> str:
