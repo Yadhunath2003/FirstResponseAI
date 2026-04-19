@@ -6,8 +6,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { useIncidentSocket } from "@/lib/ws";
-import { useIncidentVoice } from "@/lib/use-incident-voice";
-import type { WSMessage } from "@/lib/types";
+import { useChannelRoom } from "@/lib/use-channel-room";
+import type { ChannelId, WSMessage } from "@/lib/types";
 import { buttonVariants } from "@/components/ui/button";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -60,23 +60,36 @@ export default function DashboardIncidentPage({
 
   const operatorUnitId = useMemo(() => `operator-${deviceId.slice(0, 8)}`, [deviceId]);
 
-  // Receive-only WebRTC mesh: dashboard joins every peer connection but
-  // publishes no mic track. Live audio plays automatically via remote streams.
-  const sendRef = useRef<(msg: object) => boolean>(() => false);
-  const voice = useIncidentVoice({
-    unitId: operatorUnitId,
-    send: (msg) => sendRef.current(msg),
-    enabled: true,
-    receiveOnly: true,
+  // Dashboard monitors every talkgroup for this incident. One LiveKit room
+  // per channel, listen-only (no publish grant). LiveKit auto-attaches
+  // remote audio via HTMLMediaElement, so there's no AudioContext unlock
+  // gesture required for the operator.
+  const channelIds = useMemo<ChannelId[]>(
+    () => ["command", "triage", "logistics", "comms"],
+    [],
+  );
+  const command = useChannelRoom({
+    incidentId, channelId: "command", unitId: operatorUnitId,
+    callsign: "Dispatch", canPublish: false, enabled: true,
   });
-  const voiceRef = useRef(voice);
-  useEffect(() => {
-    voiceRef.current = voice;
-  }, [voice]);
+  const triage = useChannelRoom({
+    incidentId, channelId: "triage", unitId: operatorUnitId,
+    callsign: "Dispatch", canPublish: false, enabled: true,
+  });
+  const logistics = useChannelRoom({
+    incidentId, channelId: "logistics", unitId: operatorUnitId,
+    callsign: "Dispatch", canPublish: false, enabled: true,
+  });
+  const comms = useChannelRoom({
+    incidentId, channelId: "comms", unitId: operatorUnitId,
+    callsign: "Dispatch", canPublish: false, enabled: true,
+  });
+  const rooms = { command, triage, logistics, comms } as const;
+  const totalListeners = command.participantCount + triage.participantCount
+    + logistics.participantCount + comms.participantCount;
 
   const handleMessage = useCallback(
     (msg: WSMessage) => {
-      voiceRef.current.onWsMessage(msg);
       switch (msg.type) {
         case "audio":
           qc.invalidateQueries({ queryKey: ["timeline", incidentId] });
@@ -105,14 +118,11 @@ export default function DashboardIncidentPage({
   );
 
   // Operator uses the deviceId as the "unit" for WS identity.
-  const { status: wsStatus, send } = useIncidentSocket({
+  const { status: wsStatus } = useIncidentSocket({
     incidentId,
     unitId: operatorUnitId,
     onMessage: handleMessage,
   });
-  useEffect(() => {
-    sendRef.current = send;
-  }, [send]);
 
   const resolve = useMutation({
     mutationFn: ({ id, action }: { id: string; action: "accept" | "reject" }) =>
@@ -162,9 +172,26 @@ export default function DashboardIncidentPage({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={voice.unlockAudio} title="Enable live audio">
-            🔊 Live ({voice.peerCount})
-          </Button>
+          <div className="flex items-center gap-1">
+            {channelIds.map((cid) => {
+              const r = rooms[cid];
+              const hot = r.speakers.length > 0;
+              return (
+                <Badge
+                  key={cid}
+                  variant={hot ? "destructive" : r.connected ? "secondary" : "outline"}
+                  className="text-[10px] capitalize"
+                  title={`${cid} · ${r.participantCount} on air${hot ? " · LIVE" : ""}`}
+                >
+                  {hot && <span className="mr-1">●</span>}
+                  {cid}
+                </Badge>
+              );
+            })}
+          </div>
+          <Badge variant="outline" className="text-[10px]">
+            {totalListeners} units live
+          </Badge>
           <Badge variant="outline">{incident.data?.incident_type ?? "—"}</Badge>
           <Badge variant={incident.data?.status === "active" ? "default" : "secondary"}>
             {incident.data?.status ?? "—"}
