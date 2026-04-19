@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Radio, MapPinned, Phone } from "lucide-react";
+import { Radio, MapPinned, Phone, Users } from "lucide-react";
 
 export default function Landing() {
   return (
@@ -13,7 +13,7 @@ export default function Landing() {
             Select your role to get started.
           </p>
         </header>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -64,6 +64,25 @@ export default function Landing() {
             <CardContent>
               <Link href="/responder" className={buttonVariants({ className: "w-full" })}>
                 Open responder
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="size-4" /> Community
+              </CardTitle>
+              <CardDescription>
+                Neighbors — watch, share awareness, offer help.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link
+                href="/public"
+                className={buttonVariants({ variant: "outline", className: "w-full" })}
+              >
+                Open community
               </Link>
             </CardContent>
           </Card>

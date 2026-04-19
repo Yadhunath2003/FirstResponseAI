@@ -96,6 +96,22 @@ def init_db():
             channel_id TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS public_posts (
+            id TEXT PRIMARY KEY,
+            incident_id TEXT,
+            parent_id TEXT,
+            kind TEXT NOT NULL,
+            help_type TEXT,
+            author_name TEXT NOT NULL,
+            body TEXT,
+            media_url TEXT,
+            lat REAL,
+            lng REAL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_public_posts_incident ON public_posts(incident_id);
+        CREATE INDEX IF NOT EXISTS idx_public_posts_parent ON public_posts(parent_id);
     """)
     conn.commit()
     conn.close()
@@ -340,6 +356,67 @@ def get_pending_suggestions(incident_id: str) -> list[dict]:
         d['data_json'] = json.loads(d['data_json'])
         results.append(d)
     return results
+
+# Public posts (citizen awareness, help offers, needs, comments)
+def create_public_post(
+    incident_id: str | None,
+    parent_id: str | None,
+    kind: str,
+    author_name: str,
+    body: str | None = None,
+    help_type: str | None = None,
+    media_url: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
+) -> dict:
+    conn = _get_conn()
+    post_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """INSERT INTO public_posts
+           (id, incident_id, parent_id, kind, help_type, author_name, body, media_url, lat, lng, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (post_id, incident_id, parent_id, kind, help_type, author_name, body, media_url, lat, lng, now),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM public_posts WHERE id = ?", (post_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def get_public_thread(incident_id: str) -> list[dict]:
+    conn = _get_conn()
+    rows = conn.execute(
+        "SELECT * FROM public_posts WHERE incident_id = ? ORDER BY created_at ASC",
+        (incident_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_standalone_awareness_posts(limit: int = 100) -> list[dict]:
+    conn = _get_conn()
+    rows = conn.execute(
+        """SELECT * FROM public_posts
+           WHERE incident_id IS NULL AND parent_id IS NULL AND kind = 'awareness'
+           ORDER BY created_at DESC LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_help_counts(incident_id: str) -> dict:
+    conn = _get_conn()
+    rows = conn.execute(
+        """SELECT help_type, COUNT(*) as n FROM public_posts
+           WHERE incident_id = ? AND kind = 'help' AND help_type IS NOT NULL
+           GROUP BY help_type""",
+        (incident_id,),
+    ).fetchall()
+    conn.close()
+    return {r["help_type"]: r["n"] for r in rows}
+
 
 def resolve_suggestion(suggestion_id: str, status: str, resolved_by: str):
     conn = _get_conn()

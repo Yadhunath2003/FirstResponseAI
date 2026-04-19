@@ -10,6 +10,11 @@ import type {
   IncidentCreatePayload,
   IncidentDetails,
   MapZone,
+  PublicHelpType,
+  PublicIncident,
+  PublicIncidentDetail,
+  PublicPost,
+  PublicPostKind,
   Suggestion,
   UnitRegistrationPayload,
   UnitRegistrationResponse,
@@ -195,7 +200,73 @@ export const api = {
       method: "POST",
       json: { query },
     }),
+
+  // --- Public / community ---
+  listPublicIncidents: () =>
+    request<PublicIncident[]>("/api/public/incidents"),
+
+  getPublicIncident: (incidentId: string, lang: string = "en") =>
+    request<PublicIncidentDetail>(
+      `/api/public/incidents/${incidentId}?lang=${encodeURIComponent(lang)}`,
+    ),
+
+  getPublicThread: (incidentId: string) =>
+    request<PublicPost[]>(`/api/public/incidents/${incidentId}/thread`),
+
+  createPublicPost: async (params: {
+    incidentId: string;
+    kind: Exclude<PublicPostKind, "awareness">;
+    authorName?: string;
+    body?: string;
+    helpType?: PublicHelpType;
+    parentId?: string;
+    media?: File;
+  }) => {
+    const fd = new FormData();
+    fd.append("kind", params.kind);
+    if (params.authorName) fd.append("author_name", params.authorName);
+    if (params.body) fd.append("body", params.body);
+    if (params.helpType) fd.append("help_type", params.helpType);
+    if (params.parentId) fd.append("parent_id", params.parentId);
+    if (params.media) fd.append("media", params.media);
+    const res = await fetch(
+      `${API_URL}/api/public/incidents/${params.incidentId}/posts`,
+      { method: "POST", body: fd },
+    );
+    if (!res.ok) throw new ApiError(res.status, `POST public post failed`);
+    return (await res.json()) as PublicPost;
+  },
+
+  listAwarenessPosts: () =>
+    request<PublicPost[]>("/api/public/awareness"),
+
+  createAwarenessPost: async (params: {
+    authorName?: string;
+    body: string;
+    lat?: number;
+    lng?: number;
+    media?: File;
+  }) => {
+    const fd = new FormData();
+    fd.append("body", params.body);
+    if (params.authorName) fd.append("author_name", params.authorName);
+    if (params.lat !== undefined) fd.append("lat", String(params.lat));
+    if (params.lng !== undefined) fd.append("lng", String(params.lng));
+    if (params.media) fd.append("media", params.media);
+    const res = await fetch(`${API_URL}/api/public/awareness`, {
+      method: "POST",
+      body: fd,
+    });
+    if (!res.ok) throw new ApiError(res.status, `POST awareness failed`);
+    return (await res.json()) as PublicPost;
+  },
 };
+
+export function publicMediaUrl(path: string | null | undefined): string {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  return `${API_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
 
 // Static asset URL helper for audio playback.
 export function audioUrl(path: string): string {
