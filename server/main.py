@@ -400,12 +400,13 @@ async def resolve_zone_suggestion(incident_id: str, suggestion_id: str, action: 
     
     if action == "accept" and sugg:
         zone_data = sugg.get("data_json", {})
+        radius = payload.get("radius", zone_data.get("radius_meters", 500))
         zone = create_map_zone(
             incident_id,
             zone_data.get("zone_type", "danger"),
             payload.get("lat", 0.0),
             payload.get("lng", 0.0),
-            payload.get("radius", 0.0),
+            float(radius),
             zone_data.get("label", "AI Zone"),
             "ai_suggestion"
         )
