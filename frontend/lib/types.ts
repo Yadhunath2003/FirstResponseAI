@@ -75,6 +75,7 @@ export interface Incident {
 export interface IncidentDetails extends Incident {
   units: Unit[];
   summary: string;
+  initial_summary?: string;
   recent_comms: Communication[];
 }
 

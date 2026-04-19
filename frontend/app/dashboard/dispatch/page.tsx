@@ -1,333 +1,624 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { buttonVariants } from "@/components/ui/button";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { IncidentMap } from "@/components/incident-map";
-import { ArrowLeft, Search, MapPin } from "lucide-react";
+import {
+  FR,
+  SolidSquare,
+  TypeBadge,
+  PriorityBadge,
+  FrLabel,
+  TYPE_META,
+  PRIORITY_META,
+} from "@/components/fr/atoms";
+import {
+  ArrowLeft,
+  AlertCircle,
+  Users,
+  FileText,
+  Search,
+  Crosshair,
+  Flame,
+  Cross,
+} from "lucide-react";
 import type { DispatchParsed } from "@/lib/types";
 import { toast } from "sonner";
 
-const PRIORITY_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  emergency: "destructive",
-  urgent: "default",
-  routine: "secondary",
-};
-
-const INCIDENT_TYPES = [
-  { value: "structure_fire", label: "Structure Fire" },
-  { value: "mci", label: "Mass Casualty (MCI)" },
-  { value: "hazmat", label: "Hazmat" },
-  { value: "rescue", label: "Rescue" },
-  { value: "other", label: "Other" },
+const TYPES = [
+  { value: "structure_fire", label: "Structure Fire", Icon: Flame, color: FR.red },
+  { value: "mci", label: "Mass Casualty", Icon: Users, color: FR.orange },
+  { value: "hazmat", label: "Hazmat", Icon: AlertCircle, color: FR.purple },
+  { value: "rescue", label: "Rescue", Icon: Cross, color: FR.blue },
+  { value: "other", label: "Other", Icon: FileText, color: FR.sub },
 ];
 
 const PRIORITIES = [
-  { value: "emergency", label: "P1 — Emergency", color: "text-red-500" },
-  { value: "urgent", label: "P2 — Urgent", color: "text-orange-400" },
-  { value: "routine", label: "P3 — Routine", color: "text-green-400" },
+  { value: "emergency", label: "P1 EMERGENCY", color: FR.red },
+  { value: "urgent", label: "P2 URGENT", color: FR.orange },
+  { value: "routine", label: "P3 ROUTINE", color: FR.green },
 ];
 
-export default function DispatchPage() {
+export default function CallTakerPage() {
   const router = useRouter();
-  const [parsed, setParsed] = useState<DispatchParsed>({
+  const [form, setForm] = useState<DispatchParsed>({
     incident_type: "",
-    address: "",
+    priority: "emergency",
     description: "",
     notes: "",
-    priority: "emergency",
-    units_mentioned: [],
     location_lat: null,
     location_lng: null,
     location_display: null,
+    address: "",
+    units_mentioned: [],
   });
+  const [locSearch, setLocSearch] = useState("");
+  const [locResults, setLocResults] = useState <
+    { place_id: string; lat: string; lon: string; display_name: string }[]
+  >([]);
+  const [locLoading, setLocLoading] = useState(false);
+
+  const set = <K extends keyof DispatchParsed>(k: K, v: DispatchParsed[K]) =>
+    setForm((p) => ({ ...p, [k]: v }));
+
+  const searchLocation = async () => {
+    if (locSearch.trim().length < 3) return;
+    setLocLoading(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+          locSearch,
+        )}&format=json&limit=5`,
+      );
+      setLocResults(await res.json());
+    } catch {
+      toast.error("Location lookup failed");
+      setLocResults([]);
+    } finally {
+      setLocLoading(false);
+    }
+  };
+
+  const pickLocation = (r: { lat: string; lon: string; display_name: string }) => {
+    set("location_lat", parseFloat(r.lat));
+    set("location_lng", parseFloat(r.lon));
+    set("location_display", r.display_name);
+    set("address", r.display_name);
+    setLocSearch(r.display_name.split(",").slice(0, 2).join(","));
+    setLocResults([]);
+  };
+
+  const useMyLocation = () => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const disp = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+        set("location_lat", pos.coords.latitude);
+        set("location_lng", pos.coords.longitude);
+        set("location_display", disp);
+        set("address", disp);
+        toast.success("Location captured");
+      },
+      () => toast.error("Could not get location"),
+    );
+  };
+
+  const canSubmit = !!form.incident_type && form.location_lat !== null;
 
   const confirm = useMutation({
-    mutationFn: () => api.confirmDispatch(parsed!),
-    onSuccess: (incident) => {
-      toast.success(`Incident created: ${incident.name}`);
-      router.push(`/dashboard/${incident.id}`);
+    mutationFn: () => api.confirmDispatch(form),
+    onSuccess: (inc) => {
+      toast.success(`Incident created: ${inc.name}`);
+      router.push(`/dashboard/${inc.id}`);
     },
     onError: (e) => toast.error(e.message),
   });
 
-  const canConfirm =
-    parsed.incident_type &&
-    parsed.address &&
-    parsed.location_lat !== null &&
-    parsed.location_lng !== null;
+  const previewCenter: [number, number] = form.location_lat
+    ? [form.location_lat, form.location_lng!]
+    : [38.9592, -95.2453];
 
   return (
-    <div className="p-6 space-y-4 max-w-6xl mx-auto w-full">
-      <header className="flex items-center gap-2">
+    <div
+      className="h-[100dvh] flex flex-col overflow-hidden"
+      style={{ background: FR.bg }}
+    >
+      {/* Header */}
+      <header
+        className="flex items-stretch shrink-0"
+        style={{ borderBottom: `1px solid ${FR.border}` }}
+      >
         <Link
-          href="/dashboard"
-          className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+          href="/"
+          className="flex items-center px-4 py-3 transition-colors"
+          style={{
+            borderRight: `1px solid ${FR.border}`,
+            color: FR.sub,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = FR.text;
+            e.currentTarget.style.background = FR.card;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = FR.sub;
+            e.currentTarget.style.background = "transparent";
+          }}
         >
-          <ArrowLeft className="size-4" />
+          <ArrowLeft size={16} />
         </Link>
-        <div>
-          <h1 className="text-2xl font-semibold">New Incident — Call Intake</h1>
-          <p className="text-sm text-muted-foreground">
-            Enter incident details from the 911 call. Location is required.
-          </p>
+        <div
+          className="flex-1 px-4 py-3"
+          style={{ borderLeft: `3px solid ${FR.red}` }}
+        >
+          <div className="text-sm font-semibold text-white leading-tight">
+            Call Taker Intake
+          </div>
+          <div className="text-[11px] mt-0.5" style={{ color: FR.sub }}>
+            New 911 incident — complete all required fields
+          </div>
+        </div>
+        <div
+          className="flex items-center gap-2 px-4 py-3"
+          style={{ borderLeft: `1px solid ${FR.border}` }}
+        >
+          <SolidSquare
+            color={FR.red}
+            size={8}
+            className="fr-conn-live"
+            style={{ borderRadius: "50%" }}
+          />
+          <span
+            className="text-[11px] hidden sm:inline"
+            style={{ color: FR.sub }}
+          >
+            Live line
+          </span>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Body */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 overflow-hidden min-h-0">
         {/* LEFT — Form */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Incident Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-
-            {/* Incident Type */}
-            <div className="space-y-1.5">
-              <Label>Incident Type *</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {INCIDENT_TYPES.map((t) => (
+        <div
+          className="overflow-y-auto"
+          style={{
+            background: FR.bg,
+            borderRight: `1px solid ${FR.border}`,
+          }}
+        >
+          {/* Incident Type */}
+          <Section>
+            <FrLabel className="mb-2.5 block">Incident Type *</FrLabel>
+            <div
+              className="grid grid-cols-3"
+              style={{ border: `1px solid ${FR.border}` }}
+            >
+              {TYPES.map((t, i) => {
+                const sel = form.incident_type === t.value;
+                const { Icon } = t;
+                return (
                   <button
                     key={t.value}
-                    type="button"
-                    onClick={() => setParsed((p) => ({ ...p, incident_type: t.value }))}
-                    className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors text-left
-                      ${parsed.incident_type === t.value
-                        ? "border-foreground bg-foreground text-background"
-                        : "border-border bg-background hover:border-foreground/40"
-                      }`}
+                    onClick={() => set("incident_type", t.value)}
+                    className="flex flex-col items-center gap-1.5 px-2 py-3 text-[11px] font-semibold text-center transition-colors"
+                    style={{
+                      background: sel ? "#fff" : FR.card,
+                      color: sel ? "#000" : FR.sub,
+                      borderRight:
+                        i % 3 < 2 ? `1px solid ${FR.border}` : "none",
+                      borderBottom:
+                        i < 3 ? `1px solid ${FR.border}` : "none",
+                    }}
                   >
-                    {t.label}
+                    <Icon size={16} style={{ color: sel ? "#000" : t.color }} />
+                    <span className="tracking-[0.04em] leading-tight">
+                      {t.label}
+                    </span>
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
+          </Section>
 
-            {/* Priority */}
-            <div className="space-y-1.5">
-              <Label>Priority *</Label>
-              <div className="flex gap-2">
-                {PRIORITIES.map((p) => (
+          {/* Priority */}
+          <Section>
+            <FrLabel className="mb-2.5 block">Priority *</FrLabel>
+            <div
+              className="grid grid-cols-3"
+              style={{ border: `1px solid ${FR.border}` }}
+            >
+              {PRIORITIES.map((p, i) => {
+                const sel = form.priority === p.value;
+                return (
                   <button
                     key={p.value}
-                    type="button"
-                    onClick={() => setParsed((prev) => ({ ...prev, priority: p.value }))}
-                    className={`flex-1 rounded-md border px-2 py-2 text-xs font-semibold transition-colors
-                      ${parsed.priority === p.value
-                        ? "border-foreground bg-foreground text-background"
-                        : "border-border bg-background hover:border-foreground/40"
-                      }`}
+                    onClick={() => set("priority", p.value)}
+                    className="px-1.5 py-3 font-mono text-[10px] font-bold tracking-[0.06em] transition-colors"
+                    style={{
+                      background: sel ? p.color : FR.card,
+                      color: sel ? "#000" : p.color,
+                      borderRight:
+                        i < 2 ? `1px solid ${FR.border}` : "none",
+                    }}
                   >
                     {p.label}
                   </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Location search */}
-            <div className="space-y-1.5">
-              <Label>Location * <span className="text-muted-foreground font-normal">(most critical)</span></Label>
-              <LocationSearch
-                onPick={(lat, lng, display, address) =>
-                  setParsed((p) => ({
-                    ...p,
-                    location_lat: lat,
-                    location_lng: lng,
-                    location_display: display,
-                    address: address,
-                  }))
-                }
-              />
-              {parsed.location_display && (
-                <p className="text-xs text-green-400 flex items-center gap-1">
-                  <MapPin className="size-3" /> {parsed.location_display}
-                </p>
-              )}
-            </div>
-
-            {/* Use My Location */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    setParsed((p) => ({
-                      ...p,
-                      location_lat: pos.coords.latitude,
-                      location_lng: pos.coords.longitude,
-                      location_display: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
-                      address: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`,
-                    }));
-                    toast.success("Location captured");
-                  },
-                  () => toast.error("Could not get location"),
                 );
-              }}
-            >
-              <MapPin className="size-3.5 mr-1" /> Use My Location
-            </Button>
-
-            {/* Description */}
-            <div className="space-y-1.5">
-              <Label>Description</Label>
-              <Input
-                value={parsed.description ?? ""}
-                onChange={(e) => setParsed((p) => ({ ...p, description: e.target.value }))}
-                placeholder="e.g. Three-story building, possible entrapment"
-              />
+              })}
             </div>
+          </Section>
 
-            {/* Caller Notes */}
-            <div className="space-y-1.5">
-              <Label>Caller Notes</Label>
-              <textarea
-                value={parsed.notes ?? ""}
-                onChange={(e) => setParsed((p) => ({ ...p, notes: e.target.value }))}
-                rows={3}
-                className="w-full rounded-md border bg-background p-2 text-sm resize-none"
-                placeholder="Suspect description, medical status, hazards..."
-              />
-            </div>
+          {/* Location */}
+          <Section>
+            <FrLabel className="mb-2.5 block">
+              Location <span style={{ color: FR.red }}>*</span>
+            </FrLabel>
 
-          </CardContent>
-        </Card>
-
-        {/* RIGHT — Preview */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center justify-between">
-              Incident Preview
-              {parsed.priority && (
-                <Badge variant={PRIORITY_VARIANT[parsed.priority] ?? "default"}>
-                  {parsed.priority.toUpperCase()}
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-
-            <Field label="Type" value={parsed.incident_type?.replace(/_/g, " ") ?? "—"} />
-            <Field label="Address" value={parsed.address ?? "—"} />
-            <Field label="Description" value={parsed.description ?? "—"} />
-            <Field label="Notes" value={parsed.notes ?? "—"} />
-            <Field
-              label="Coordinates"
-              value={
-                parsed.location_lat && parsed.location_lng
-                  ? `${parsed.location_lat.toFixed(4)}, ${parsed.location_lng.toFixed(4)}`
-                  : "Not set"
-              }
-            />
-
-            {parsed.location_lat && parsed.location_lng && (
-              <div className="h-52 rounded-md overflow-hidden border mt-2">
-                <IncidentMap
-                  center={[parsed.location_lat, parsed.location_lng]}
-                  interactive={false}
-                />
-              </div>
-            )}
-
-            {!canConfirm && (
-              <p className="text-xs text-amber-400">
-                Incident type and location are required before creating.
-              </p>
-            )}
-
-            <Button
-              className="w-full"
-              size="lg"
-              disabled={!canConfirm || confirm.isPending}
-              onClick={() => confirm.mutate()}
+            <div
+              className="flex mb-2"
+              style={{ border: `1px solid ${FR.border}` }}
             >
-              {confirm.isPending ? "Creating incident…" : "🚨 Create Incident"}
-            </Button>
-
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </Label>
-      <p className="text-sm">{value || "—"}</p>
-    </div>
-  );
-}
-
-function LocationSearch({
-  onPick,
-}: {
-  onPick: (lat: number, lng: number, display: string, address: string) => void;
-}) {
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<{ lat: string; lon: string; display_name: string }[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const search = async () => {
-    if (q.trim().length < 3) return;
-    setLoading(true);
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5`;
-      const res = await fetch(url);
-      const items = await res.json();
-      setResults(items);
-    } catch {
-      toast.error("Geocoding lookup failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex gap-1">
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") search(); }}
-          placeholder="Search address — press Enter"
-          autoFocus
-        />
-        <Button variant="outline" size="sm" disabled={loading} onClick={search}>
-          <Search className="size-3.5" />
-        </Button>
-      </div>
-      {results.length > 0 && (
-        <ul className="rounded-md border divide-y max-h-40 overflow-y-auto">
-          {results.map((r) => (
-            <li key={`${r.lat}-${r.lon}`}>
+              <input
+                value={locSearch}
+                onChange={(e) => setLocSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && searchLocation()}
+                placeholder="Search address or cross-street…"
+                className="flex-1 px-3 py-2.5 text-[13px] outline-none placeholder:text-[#444]"
+                style={{
+                  background: "#0a0a0a",
+                  color: FR.text,
+                  border: "none",
+                  borderRight: `1px solid ${FR.border}`,
+                }}
+              />
               <button
-                type="button"
-                className="w-full text-left p-2 text-xs hover:bg-muted"
-                onClick={() => {
-                  onPick(parseFloat(r.lat), parseFloat(r.lon), r.display_name, r.display_name);
-                  setResults([]);
-                  setQ(r.display_name);
+                onClick={searchLocation}
+                className="px-3.5 transition-colors flex items-center"
+                style={{ background: FR.card, color: FR.sub }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "#2a2a2a")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = FR.card)
+                }
+              >
+                {locLoading ? (
+                  <span
+                    className="block w-3 h-3 rounded-full"
+                    style={{
+                      border: `2px solid ${FR.borderStrong}`,
+                      borderTopColor: "#fff",
+                      animation: "spin 0.6s linear infinite",
+                    }}
+                  />
+                ) : (
+                  <Search size={14} />
+                )}
+              </button>
+            </div>
+
+            {locResults.length > 0 && (
+              <div
+                className="mb-2"
+                style={{
+                  background: FR.panel,
+                  border: `1px solid ${FR.border}`,
+                  borderTop: "none",
                 }}
               >
-                {r.display_name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+                {locResults.map((r: { place_id: string; lat: string; lon: string; display_name: string }, i: number) => (
+                  <button
+                    key={r.place_id}
+                    onClick={() => pickLocation(r)}
+                    className="w-full text-left px-3 py-2 text-[12px] transition-colors"
+                    style={{
+                      color: FR.sub,
+                      borderBottom:
+                        i < locResults.length - 1
+                          ? `1px solid ${FR.border}`
+                          : "none",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = FR.card;
+                      e.currentTarget.style.color = FR.text;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                      e.currentTarget.style.color = FR.sub;
+                    }}
+                  >
+                    {r.display_name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {form.location_display && (
+              <div
+                className="p-2.5 mb-2 flex items-start gap-2"
+                style={{
+                  background: "#0d2c1a",
+                  border: `1px solid ${FR.green}`,
+                }}
+              >
+                <SolidSquare
+                  color={FR.green}
+                  size={8}
+                  style={{ marginTop: 3 }}
+                />
+                <div className="min-w-0 flex-1">
+                  <div
+                    className="font-mono text-[11px] leading-[1.4] break-words"
+                    style={{ color: FR.green }}
+                  >
+                    {form.location_display}
+                  </div>
+                  {form.location_lat && (
+                    <div
+                      className="font-mono text-[10px] mt-0.5"
+                      style={{ color: FR.green + "aa" }}
+                    >
+                      {form.location_lat.toFixed(5)},{" "}
+                      {form.location_lng!.toFixed(5)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={useMyLocation}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-[11px] font-semibold tracking-[0.06em] transition-colors"
+              style={{
+                background: FR.card,
+                border: `1px solid ${FR.border}`,
+                color: FR.sub,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = FR.borderStrong;
+                e.currentTarget.style.color = FR.text;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = FR.border;
+                e.currentTarget.style.color = FR.sub;
+              }}
+            >
+              <Crosshair size={14} />
+              USE MY LOCATION
+            </button>
+          </Section>
+
+          {/* Description */}
+          <Section>
+            <FrLabel className="mb-2.5 block">Description</FrLabel>
+            <input
+              value={form.description ?? ""}
+              onChange={(e) => set("description", e.target.value)}
+              placeholder="e.g. Three-story wood frame, possible entrapment"
+              className="w-full px-3 py-2.5 text-[13px] outline-none placeholder:text-[#444]"
+              style={{
+                background: "#0a0a0a",
+                color: FR.text,
+                border: `1px solid ${FR.border}`,
+              }}
+              onFocus={(e) =>
+                (e.currentTarget.style.borderColor = FR.borderStrong)
+              }
+              onBlur={(e) => (e.currentTarget.style.borderColor = FR.border)}
+            />
+          </Section>
+
+          {/* Caller Notes */}
+          <Section>
+            <FrLabel className="mb-2.5 block">Caller Notes</FrLabel>
+            <textarea
+              value={form.notes ?? ""}
+              onChange={(e) => set("notes", e.target.value)}
+              placeholder="Hazards, suspect description, medical status, caller name…"
+              rows={4}
+              className="w-full px-3 py-2.5 font-mono text-[12px] outline-none placeholder:text-[#444] resize-y"
+              style={{
+                background: "#0a0a0a",
+                color: FR.text,
+                border: `1px solid ${FR.border}`,
+                minHeight: 72,
+              }}
+              onFocus={(e) =>
+                (e.currentTarget.style.borderColor = FR.borderStrong)
+              }
+              onBlur={(e) => (e.currentTarget.style.borderColor = FR.border)}
+            />
+          </Section>
+
+          {/* Submit */}
+          <div className="p-4">
+            <button
+              onClick={() => confirm.mutate()}
+              disabled={!canSubmit || confirm.isPending}
+              className="w-full py-3.5 font-mono text-[12px] font-bold tracking-[0.1em] transition-colors"
+              style={{
+                background: canSubmit ? FR.red : FR.card,
+                color: canSubmit ? "#fff" : FR.dim,
+                border: `1px solid ${canSubmit ? "#fff" : FR.border}`,
+                cursor:
+                  canSubmit && !confirm.isPending ? "pointer" : "not-allowed",
+              }}
+            >
+              {confirm.isPending
+                ? "CREATING INCIDENT…"
+                : "CREATE INCIDENT"}
+            </button>
+          </div>
+        </div>
+
+        {/* RIGHT — Live Preview */}
+        <div
+          className="overflow-y-auto"
+          style={{ background: "#080808" }}
+        >
+          <div
+            className="flex items-center justify-between px-4 py-3"
+            style={{ borderBottom: `1px solid ${FR.border}` }}
+          >
+            <FrLabel>LIVE PREVIEW</FrLabel>
+            <div className="flex gap-1.5 items-center">
+              {form.incident_type && (
+                <TypeBadge type={form.incident_type} small />
+              )}
+              {form.priority && (
+                <PriorityBadge priority={form.priority} short />
+              )}
+            </div>
+          </div>
+
+          {/* Preview card */}
+          <div className="p-4">
+            <div
+              style={{
+                background: FR.card,
+                border: `1px solid ${FR.border}`,
+              }}
+            >
+              {/* Card header */}
+              <div
+                className="px-4 py-3"
+                style={{ borderBottom: `1px solid ${FR.border}` }}
+              >
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {form.priority && <PriorityBadge priority={form.priority} />}
+                </div>
+                <div className="text-[15px] font-bold text-white mb-1">
+                  {form.description || (
+                    <span style={{ color: "#444" }}>
+                      Incident description…
+                    </span>
+                  )}
+                </div>
+                <div
+                  className="text-[12px] flex items-center gap-1.5"
+                  style={{ color: FR.sub }}
+                >
+                  {form.location_display || (
+                    <span style={{ color: "#333" }}>No location selected</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div
+                className="px-4 py-3"
+                style={{ borderBottom: `1px solid ${FR.border}` }}
+              >
+                <div
+                  className="font-mono text-[10px] tracking-[0.08em] mb-1.5"
+                  style={{ color: FR.dim }}
+                >
+                  CALLER NOTES
+                </div>
+                <div
+                  className="font-mono text-[11px] leading-relaxed"
+                  style={{ color: form.notes ? "#bbb" : "#333" }}
+                >
+                  {form.notes || "No notes entered"}
+                </div>
+              </div>
+
+              {/* Map preview */}
+              <div className="h-[240px]">
+                <IncidentMap center={previewCenter} interactive={false} />
+              </div>
+            </div>
+
+            {/* Field summary table */}
+            <div
+              className="mt-4"
+              style={{
+                background: FR.panel,
+                border: `1px solid ${FR.border}`,
+              }}
+            >
+              {[
+                {
+                  label: "TYPE",
+                  value: form.incident_type
+                    ? TYPE_META[form.incident_type]?.label
+                    : null,
+                },
+                {
+                  label: "PRIORITY",
+                  value: form.priority
+                    ? PRIORITY_META[form.priority]?.label
+                    : null,
+                },
+                { label: "ADDRESS", value: form.address || null, mono: true },
+                {
+                  label: "COORDS",
+                  value:
+                    form.location_lat !== null
+                      ? `${form.location_lat!.toFixed(5)}, ${form.location_lng!.toFixed(5)}`
+                      : null,
+                  mono: true,
+                },
+              ].map((f, i) => (
+                <div
+                  key={f.label}
+                  className="flex justify-between items-center gap-4 px-4 py-2.5"
+                  style={{
+                    borderBottom:
+                      i < 3 ? `1px solid ${FR.border}` : "none",
+                  }}
+                >
+                  <span
+                    className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] shrink-0"
+                    style={{ color: FR.dim }}
+                  >
+                    {f.label}
+                  </span>
+                  <span
+                    className={`text-right break-all ${f.mono ? "font-mono text-[11px]" : "text-[12px]"}`}
+                    style={{
+                      color: f.value ? "#ccc" : "#333",
+                      maxWidth: "60%",
+                    }}
+                  >
+                    {f.value || "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {!canSubmit && (
+              <div
+                className="mt-4 px-3 py-2.5"
+                style={{
+                  background: "#1a1200",
+                  border: `1px solid ${FR.orange}`,
+                }}
+              >
+                <span
+                  className="font-mono text-[11px]"
+                  style={{ color: FR.orange }}
+                >
+                  Incident type and location required before creating.
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="px-4 py-3.5"
+      style={{ borderBottom: `1px solid ${FR.border}` }}
+    >
+      {children}
     </div>
   );
 }

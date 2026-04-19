@@ -128,3 +128,55 @@
     @apply font-sans;
   }
 }
+
+/* ============================================================
+   FirstResponse CAD — v2 design tokens
+   ============================================================ */
+:root {
+  --fr-bg: #000000;
+  --fr-panel: #111111;
+  --fr-card: #1a1a1a;
+  --fr-card-hover: #141414;
+  --fr-border: #333333;
+  --fr-border-strong: #555555;
+  --fr-text: #ffffff;
+  --fr-sub: #888888;
+  --fr-dim: #555555;
+  --fr-red: #e74c3c;
+  --fr-orange: #f39c12;
+  --fr-green: #2ecc71;
+  --fr-blue: #3498db;
+  --fr-purple: #9b59b6;
+}
+
+/* Scrollbars — solid, no radius */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #333; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* Animations from the v2 design — no fade/blur/glow */
+@keyframes fr-conn-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.fr-conn-live { animation: fr-conn-blink 2s ease-in-out infinite; }
+
+@keyframes fr-card-border-pulse {
+  0%, 100% { border-color: #333; }
+  50% { border-color: #555; }
+}
+.fr-active-card-anim { animation: fr-card-border-pulse 2s ease-in-out infinite; }
+
+@keyframes fr-summary-flash {
+  0% { border-color: #fff; }
+  80% { border-color: #fff; }
+  100% { border-color: #333; }
+}
+.fr-summary-flashing { animation: fr-summary-flash 2s ease forwards; }
+
+@keyframes fr-slide-up {
+  from { transform: translateY(20px); }
+  to { transform: translateY(0); }
+}
+.fr-entry-new { animation: fr-slide-up 200ms ease forwards; }

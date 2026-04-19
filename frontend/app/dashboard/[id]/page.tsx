@@ -8,16 +8,24 @@ import { useSession } from "@/lib/session";
 import { useIncidentSocket } from "@/lib/ws";
 import { useIncidentVoice } from "@/lib/use-incident-voice";
 import type { WSMessage } from "@/lib/types";
-import { buttonVariants } from "@/components/ui/button";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { IncidentMap } from "@/components/incident-map";
-import { SummaryPanel } from "@/components/summary-panel";
-import { Timeline } from "@/components/timeline";
-import { ConnectionBadge } from "@/components/connection-badge";
-import { ArrowLeft, Search, Sparkles, Users, Radio } from "lucide-react";
+import {
+  FR,
+  SolidSquare,
+  TypeBadge,
+  StatusBadge,
+  FrLabel,
+  TYPE_META,
+} from "@/components/fr/atoms";
+import {
+  ArrowLeft,
+  Search,
+  Sparkles,
+  Users,
+  Radio,
+  Volume2,
+  Wifi,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export default function DashboardIncidentPage({
@@ -30,7 +38,7 @@ export default function DashboardIncidentPage({
   const qc = useQueryClient();
   const { deviceId } = useSession();
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<
+  const [searchResults, setSearchResults] = useState <
     import("@/lib/types").Communication[] | null
   >(null);
 
@@ -58,10 +66,11 @@ export default function DashboardIncidentPage({
     refetchInterval: 10_000,
   });
 
-  const operatorUnitId = useMemo(() => `operator-${deviceId.slice(0, 8)}`, [deviceId]);
+  const operatorUnitId = useMemo(
+    () => `operator-${deviceId.slice(0, 8)}`,
+    [deviceId],
+  );
 
-  // Receive-only WebRTC mesh: dashboard joins every peer connection but
-  // publishes no mic track. Live audio plays automatically via remote streams.
   const sendRef = useRef<(msg: object) => boolean>(() => false);
   const voice = useIncidentVoice({
     unitId: operatorUnitId,
@@ -94,17 +103,20 @@ export default function DashboardIncidentPage({
           break;
         case "unit_joined":
           qc.invalidateQueries({ queryKey: ["incident", incidentId] });
-          toast.success(`${(msg as { unit_callsign?: string }).unit_callsign} joined`);
+          toast.success(
+            `${(msg as { unit_callsign?: string }).unit_callsign} joined`,
+          );
           break;
         case "conflict":
-          toast.warning(`Conflict: ${(msg as { description?: string }).description}`);
+          toast.warning(
+            `Conflict: ${(msg as { description?: string }).description}`,
+          );
           break;
       }
     },
     [qc, incidentId],
   );
 
-  // Operator uses the deviceId as the "unit" for WS identity.
   const { status: wsStatus, send } = useIncidentSocket({
     incidentId,
     unitId: operatorUnitId,
@@ -142,90 +154,220 @@ export default function DashboardIncidentPage({
     [incident.data],
   );
 
+  const comms = searchResults ?? timeline.data ?? [];
+  const wsConnected = wsStatus === "open";
+
   return (
-    <div className="flex flex-col h-[100dvh]">
-      <header className="p-3 border-b flex items-center justify-between gap-3">
+    <div
+      className="h-[100dvh] flex flex-col overflow-hidden"
+      style={{ background: FR.bg }}
+    >
+      {/* Header */}
+      <header
+        className="flex items-center justify-between gap-3 px-4 py-3 shrink-0"
+        style={{ borderBottom: `1px solid ${FR.border}` }}
+      >
         <div className="flex items-center gap-2 min-w-0">
           <Link
             href="/dashboard"
-            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+            className="flex items-center px-1 py-1 transition-colors"
+            style={{ color: FR.sub }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = FR.text)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = FR.sub)}
           >
-            <ArrowLeft className="size-4" />
+            <ArrowLeft size={18} />
           </Link>
           <div className="min-w-0">
-            <h1 className="text-base font-semibold truncate">
+            <h1 className="text-base font-bold tracking-tight text-white truncate">
               {incident.data?.name ?? "Incident"}
             </h1>
-            <p className="text-xs text-muted-foreground truncate">
+            <p
+              className="text-[11px] truncate"
+              style={{ color: FR.sub }}
+            >
               {incident.data?.location_name ?? ""}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={voice.unlockAudio} title="Enable live audio">
-            🔊 Live ({voice.peerCount})
-          </Button>
-          <Badge variant="outline">{incident.data?.incident_type ?? "—"}</Badge>
-          <Badge variant={incident.data?.status === "active" ? "default" : "secondary"}>
-            {incident.data?.status ?? "—"}
-          </Badge>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={voice.unlockAudio}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold transition-colors"
+            style={{
+              background: FR.card,
+              border: `1px solid ${FR.border}`,
+              color: FR.sub,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = FR.borderStrong;
+              e.currentTarget.style.color = FR.text;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = FR.border;
+              e.currentTarget.style.color = FR.sub;
+            }}
+            title="Enable live audio"
+          >
+            <Volume2 size={12} />
+            Live ({voice.peerCount})
+          </button>
+          {incident.data?.incident_type && (
+            <TypeBadge type={incident.data.incident_type} />
+          )}
+          {incident.data?.status && <StatusBadge status={incident.data.status} />}
           <DispatchButton
-            incidentId={incidentId}
             incidentName={incident.data?.name ?? "Incident"}
             units={incident.data?.units ?? []}
             onOpenChange={setDispatchOpen}
           />
-          <ConnectionBadge status={wsStatus} />
+          <div className="flex items-center gap-1.5">
+            <SolidSquare
+              color={wsConnected ? FR.green : FR.red}
+              size={7}
+              className={wsConnected ? "fr-conn-live" : ""}
+              style={{ borderRadius: "50%" }}
+            />
+            <span
+              className="font-mono text-[10px] tracking-[0.06em] hidden sm:inline"
+              style={{ color: FR.sub }}
+            >
+              WS
+            </span>
+          </div>
         </div>
       </header>
 
-      <div className="flex-1 grid grid-cols-12 gap-3 p-3 overflow-hidden">
-        {/* Map — large left */}
-        <section className="col-span-12 lg:col-span-7 rounded-md overflow-hidden border">
-          {!dispatchOpen && <IncidentMap center={center} zones={zones.data ?? []} />}
+      {/* Body — 3 columns */}
+      <div
+        className="flex-1 grid overflow-hidden min-h-0"
+        style={{ gridTemplateColumns: "minmax(0, 1fr) 340px 380px" }}
+      >
+        {/* LEFT — Map */}
+        <section
+          className="relative overflow-hidden"
+          style={{ borderRight: `1px solid ${FR.border}` }}
+        >
+          {!dispatchOpen && (
+            <IncidentMap center={center} zones={zones.data ?? []} />
+          )}
+          {/* Zone legend overlay */}
+          <div
+            className="absolute bottom-4 left-4 z-[500] p-2.5"
+            style={{
+              background: FR.panel,
+              border: `1px solid ${FR.border}`,
+            }}
+          >
+            <div
+              className="font-mono text-[9px] font-semibold tracking-[0.1em] mb-1.5"
+              style={{ color: FR.sub }}
+            >
+              ZONES
+            </div>
+            {[
+              { label: "Danger", color: FR.red },
+              { label: "Warm Zone", color: FR.orange },
+              { label: "Cold Zone", color: FR.green },
+              { label: "Staging", color: FR.purple },
+              { label: "Landing", color: FR.blue },
+            ].map((z) => (
+              <div key={z.label} className="flex items-center gap-2 py-0.5">
+                <SolidSquare
+                  color={z.color}
+                  size={8}
+                  style={{ borderRadius: "50%" }}
+                />
+                <span
+                  className="text-[11px]"
+                  style={{ color: FR.sub }}
+                >
+                  {z.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </section>
 
-        {/* Right column: summary, units, suggestions */}
-        <aside className="col-span-12 lg:col-span-5 flex flex-col gap-3 min-h-0">
-          <div className="h-[32%] min-h-[160px]">
-            <SummaryPanel summary={incident.data?.summary ?? ""} initialSummary={incident.data?.initial_summary} />
+        {/* MIDDLE — Intelligence stack */}
+        <aside
+          className="flex flex-col overflow-hidden"
+          style={{ borderRight: `1px solid ${FR.border}` }}
+        >
+          {/* Summary */}
+          <div
+            className="flex flex-col p-3 shrink-0"
+            style={{ borderBottom: `1px solid ${FR.border}` }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles size={12} style={{ color: FR.blue }} />
+              <FrLabel>INCIDENT SUMMARY</FrLabel>
+            </div>
+            <div
+              className="p-3 text-[12px] leading-relaxed max-h-[180px] overflow-y-auto"
+              style={{
+                background: FR.card,
+                border: `1px solid ${FR.border}`,
+                color: "#bbb",
+              }}
+            >
+              {incident.data?.summary ||
+                "Awaiting communications to generate summary…"}
+            </div>
           </div>
 
-          <Card className="h-[22%] min-h-[120px] flex flex-col">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Users className="size-4" /> Units ({incident.data?.units?.length ?? 0})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto">
-              {(incident.data?.units ?? []).length === 0 ? (
-                <p className="text-xs text-muted-foreground">No units joined yet.</p>
-              ) : (
-                <ul className="flex flex-wrap gap-1">
-                  {incident.data!.units.map((u) => (
-                    <li key={u.id}>
-                      <Badge variant="secondary" className="text-[10px]">
-                        {u.callsign}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
+          {/* Units */}
+          <div
+            className="flex flex-col p-3 shrink-0"
+            style={{ borderBottom: `1px solid ${FR.border}` }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Users size={12} style={{ color: FR.sub }} />
+              <FrLabel>
+                UNITS ({incident.data?.units?.length ?? 0})
+              </FrLabel>
+            </div>
+            {(incident.data?.units?.length ?? 0) === 0 ? (
+              <p className="text-[11px]" style={{ color: FR.dim }}>
+                No units joined yet.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {incident.data!.units.map((u) => (
+                  <span
+                    key={u.id}
+                    className="font-mono text-[10px] font-semibold tracking-[0.04em] px-1.5 py-0.5"
+                    style={{
+                      background: FR.red + "22",
+                      border: `1px solid ${FR.red}55`,
+                      color: FR.red,
+                    }}
+                  >
+                    {u.callsign}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <Card className="flex-1 flex flex-col min-h-0">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Sparkles className="size-4" /> AI Suggestions
-                {(suggestions.data?.length ?? 0) > 0 && (
-                  <Badge className="ml-auto">{suggestions.data!.length}</Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto space-y-2">
+          {/* Suggestions */}
+          <div className="flex-1 flex flex-col min-h-0 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles size={12} style={{ color: FR.orange }} />
+              <FrLabel>ZONE SUGGESTIONS</FrLabel>
+              {(suggestions.data?.length ?? 0) > 0 && (
+                <span
+                  className="ml-auto font-mono text-[9px] font-bold px-1.5 py-0.5"
+                  style={{ background: FR.orange, color: "#000" }}
+                >
+                  {suggestions.data!.length}
+                </span>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-2">
               {(suggestions.data ?? []).length === 0 && (
-                <p className="text-xs text-muted-foreground">No pending suggestions.</p>
+                <p className="text-[11px]" style={{ color: FR.dim }}>
+                  No pending suggestions.
+                </p>
               )}
               {suggestions.data?.map((s) => {
                 const data = s.data_json as {
@@ -234,85 +376,207 @@ export default function DashboardIncidentPage({
                   reason?: string;
                 };
                 return (
-                  <div key={s.id} className="rounded-md border p-2 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline">{data.zone_type ?? "zone"}</Badge>
-                      <span className="text-[10px] text-muted-foreground">
+                  <div
+                    key={s.id}
+                    className="p-2.5"
+                    style={{
+                      background: FR.card,
+                      border: `1px solid ${FR.border}`,
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span
+                        className="font-mono text-[9px] font-bold uppercase tracking-[0.06em] px-1.5 py-0.5"
+                        style={{
+                          background: FR.red + "22",
+                          border: `1px solid ${FR.red}55`,
+                          color: FR.red,
+                        }}
+                      >
+                        {data.zone_type ?? "ZONE"}
+                      </span>
+                      <span
+                        className="font-mono text-[10px]"
+                        style={{ color: FR.dim }}
+                      >
                         {new Date(s.created_at).toLocaleTimeString()}
                       </span>
                     </div>
-                    <p className="text-xs">
-                      <strong>{data.label}</strong> — {data.reason}
+                    <p className="text-[11px] mb-2" style={{ color: "#ccc" }}>
+                      <strong className="text-white">{data.label}</strong>
+                      {" — "}
+                      {data.reason}
                     </p>
                     <div className="flex gap-1">
-                      <Button
-                        size="xs"
-                        onClick={() => resolve.mutate({ id: s.id, action: "accept" })}
+                      <button
+                        onClick={() =>
+                          resolve.mutate({ id: s.id, action: "accept" })
+                        }
                         disabled={resolve.isPending}
+                        className="flex-1 py-1.5 font-mono text-[10px] font-bold tracking-[0.06em] transition-colors"
+                        style={{
+                          background: FR.green,
+                          color: "#000",
+                          border: `1px solid ${FR.green}`,
+                        }}
                       >
-                        Accept
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => resolve.mutate({ id: s.id, action: "reject" })}
+                        ACCEPT
+                      </button>
+                      <button
+                        onClick={() =>
+                          resolve.mutate({ id: s.id, action: "reject" })
+                        }
                         disabled={resolve.isPending}
+                        className="flex-1 py-1.5 font-mono text-[10px] font-bold tracking-[0.06em] transition-colors"
+                        style={{
+                          background: "transparent",
+                          color: FR.sub,
+                          border: `1px solid ${FR.border}`,
+                        }}
                       >
-                        Reject
-                      </Button>
+                        REJECT
+                      </button>
                     </div>
                   </div>
                 );
               })}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+        </aside>
+
+        {/* RIGHT — Timeline */}
+        <aside className="flex flex-col overflow-hidden">
+          <div
+            className="p-3 shrink-0"
+            style={{ borderBottom: `1px solid ${FR.border}` }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <FrLabel>COMMUNICATIONS</FrLabel>
+              <span
+                className="font-mono text-[10px]"
+                style={{ color: FR.dim }}
+              >
+                {comms.length} entries
+              </span>
+            </div>
+            <div className="flex gap-1">
+              <div className="flex-1 flex items-center gap-2 px-2 py-1.5" style={{ background: "#0a0a0a", border: `1px solid ${FR.border}` }}>
+                <Search size={12} style={{ color: FR.dim }} />
+                <input
+                  placeholder="Search transcript…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && searchQuery.trim())
+                      search.mutate();
+                  }}
+                  className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-[#444]"
+                  style={{ color: FR.text }}
+                />
+              </div>
+              {searchResults && (
+                <button
+                  onClick={() => {
+                    setSearchResults(null);
+                    setSearchQuery("");
+                  }}
+                  className="px-2 text-[10px] font-mono tracking-[0.06em]"
+                  style={{
+                    background: FR.card,
+                    border: `1px solid ${FR.border}`,
+                    color: FR.sub,
+                  }}
+                >
+                  CLEAR
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {comms.length === 0 && (
+              <p
+                className="text-center text-[11px] p-6"
+                style={{ color: FR.dim }}
+              >
+                {searchResults
+                  ? "No matches found."
+                  : "Waiting for communications…"}
+              </p>
+            )}
+            {comms.map((c) => (
+              <TimelineEntry key={c.id} comm={c} />
+            ))}
+          </div>
         </aside>
       </div>
+    </div>
+  );
+}
 
-      {/* Timeline row */}
-      <section className="border-t h-[30%] min-h-[220px] flex flex-col">
-        <div className="p-2 border-b flex items-center gap-2">
-          <h2 className="text-sm font-medium mr-2">Timeline</h2>
-          <div className="flex-1 flex items-center gap-2 max-w-md">
-            <Input
-              placeholder="Search communications…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && searchQuery.trim()) search.mutate();
-              }}
-              className="h-7 text-xs"
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!searchQuery.trim() || search.isPending}
-              onClick={() => search.mutate()}
-            >
-              <Search className="size-3" />
-            </Button>
-            {searchResults && (
-              <Button size="sm" variant="ghost" onClick={() => setSearchResults(null)}>
-                Clear
-              </Button>
-            )}
-          </div>
+function TimelineEntry({
+  comm,
+}: {
+  comm: import("@/lib/types").Communication;
+}) {
+  const channelColors: Record<string, string> = {
+    command: FR.red,
+    triage: FR.orange,
+    logistics: FR.green,
+    comms: FR.blue,
+  };
+  const color = channelColors[comm.channel_id] || FR.sub;
+  const time = new Date(comm.timestamp).toLocaleTimeString("en", {
+    hour12: false,
+  });
+
+  return (
+    <div
+      className="px-3 py-2.5 flex gap-2.5 fr-entry-new"
+      style={{ borderBottom: `1px solid ${FR.border}` }}
+    >
+      <div
+        className="w-0.5 shrink-0 self-stretch"
+        style={{ background: color }}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <span
+            className="font-mono text-[11px] font-bold"
+            style={{ color: FR.text }}
+          >
+            {comm.unit_callsign}
+          </span>
+          <span
+            className="font-mono text-[9px] font-semibold uppercase tracking-[0.06em] px-1.5 py-0.5"
+            style={{
+              background: color + "22",
+              border: `1px solid ${color}44`,
+              color,
+            }}
+          >
+            {comm.channel_id}
+          </span>
+          <span
+            className="ml-auto font-mono text-[10px]"
+            style={{ color: FR.dim }}
+          >
+            {time}
+          </span>
         </div>
-        <div className="flex-1 overflow-hidden">
-          <Timeline comms={searchResults ?? timeline.data ?? []} />
-        </div>
-      </section>
+        <p className="text-[12px] leading-relaxed" style={{ color: "#ccc" }}>
+          {comm.transcript}
+        </p>
+      </div>
     </div>
   );
 }
 
 function DispatchButton({
-  incidentId,
   incidentName,
   units,
   onOpenChange,
 }: {
-  incidentId: string;
   incidentName: string;
   units: import("@/lib/types").Unit[];
   onOpenChange?: (open: boolean) => void;
@@ -329,57 +593,109 @@ function DispatchButton({
     setDispatched(true);
     setOpenWithCallback(false);
     toast.success(`Units dispatched to ${incidentName}`, {
-      description: units.length > 0
-        ? `${units.map((u) => u.callsign).join(", ")} are en route.`
-        : "Awaiting unit assignment.",
+      description:
+        units.length > 0
+          ? `${units.map((u) => u.callsign).join(", ")} are en route.`
+          : "Awaiting unit assignment.",
       duration: 6000,
     });
   };
 
   return (
     <>
-      <Button
-        size="sm"
-        variant={dispatched ? "secondary" : "destructive"}
+      <button
         onClick={() => setOpenWithCallback(true)}
-        className="gap-1.5"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold tracking-[0.04em] transition-colors"
+        style={{
+          background: dispatched ? FR.card : FR.red,
+          color: dispatched ? FR.sub : "#fff",
+          border: `1px solid ${dispatched ? FR.border : FR.red}`,
+        }}
       >
-        <Radio className="size-3.5" />
+        <Radio size={12} />
         {dispatched ? "Dispatched" : "Dispatch Units"}
-      </Button>
+      </button>
 
       {open && (
         <div
-          className="fixed inset-0 flex items-center justify-center bg-black/60"
-          style={{ zIndex: 9999 }}
+          className="fixed inset-0 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.85)", zIndex: 9999 }}
         >
-          <div className="bg-background border rounded-lg p-6 w-full max-w-sm space-y-4 shadow-xl">
-            <h2 className="text-lg font-semibold">Dispatch Units</h2>
-            <p className="text-sm text-muted-foreground">
-              Confirm dispatch of all units to{" "}
-              <span className="text-foreground font-medium">{incidentName}</span>.
-            </p>
+          <div
+            className="p-6 w-full max-w-sm space-y-4"
+            style={{
+              background: FR.panel,
+              border: `2px solid ${FR.text}`,
+            }}
+          >
+            <div>
+              <FrLabel>CONFIRM DISPATCH</FrLabel>
+              <p
+                className="text-[13px] mt-2"
+                style={{ color: "#ccc" }}
+              >
+                Confirm dispatch of all units to{" "}
+                <span
+                  className="font-semibold"
+                  style={{ color: FR.text }}
+                >
+                  {incidentName}
+                </span>
+                .
+              </p>
+            </div>
+
             {units.length > 0 ? (
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Units on scene</p>
+              <div className="space-y-2">
+                <FrLabel>UNITS ON SCENE</FrLabel>
                 <div className="flex flex-wrap gap-1">
                   {units.map((u) => (
-                    <Badge key={u.id} variant="outline" className="text-xs">
+                    <span
+                      key={u.id}
+                      className="font-mono text-[10px] font-semibold tracking-[0.04em] px-1.5 py-0.5"
+                      style={{
+                        background: FR.card,
+                        border: `1px solid ${FR.border}`,
+                        color: FR.text,
+                      }}
+                    >
                       {u.callsign}
-                    </Badge>
+                    </span>
                   ))}
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-amber-400">No units have joined yet.</p>
+              <p
+                className="text-[11px]"
+                style={{ color: FR.orange }}
+              >
+                No units have joined yet.
+              </p>
             )}
+
             <div className="flex gap-2 pt-2">
-              <Button className="flex-1" variant="destructive" onClick={handleDispatch}>
-                Confirm Dispatch
-              </Button>
-              <Button className="flex-1" variant="outline" onClick={() => setOpenWithCallback(false)}>
-                Cancel
-              </Button>
+              <button
+                onClick={handleDispatch}
+                className="flex-1 py-2.5 font-mono text-[11px] font-bold tracking-[0.1em]"
+                style={{
+                  background: FR.red,
+                  color: "#fff",
+                  border: `1px solid ${FR.red}`,
+                }}
+              >
+                CONFIRM DISPATCH
+              </button>
+              <button
+                onClick={() => setOpenWithCallback(false)}
+                className="flex-1 py-2.5 font-mono text-[11px] font-bold tracking-[0.1em]"
+                style={{
+                  background: "transparent",
+                  color: FR.sub,
+                  border: `1px solid ${FR.border}`,
+                }}
+              >
+                CANCEL
+              </button>
             </div>
           </div>
         </div>
