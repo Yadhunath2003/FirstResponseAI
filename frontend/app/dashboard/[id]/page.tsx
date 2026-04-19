@@ -187,12 +187,12 @@ export default function DashboardIncidentPage({
   });
 
   const resolve = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: "accept" | "reject" }) =>
+    mutationFn: ({ id, action, radius }: { id: string; action: "accept" | "reject"; radius?: number }) =>
       api.resolveSuggestion(incidentId, id, action, {
         resolved_by: "operator",
         lat: incident.data?.location_lat,
         lng: incident.data?.location_lng,
-        radius: 500,
+        radius,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["suggestions", incidentId] });
@@ -225,6 +225,10 @@ export default function DashboardIncidentPage({
   const searching = search.isPending;
   const aiUpdating = incident.isFetching || suggestions.isFetching || zones.isFetching;
   const wsConnected = wsStatus === "connected";
+  const hasPendingSuggestions = (suggestions.data?.length ?? 0) > 0;
+  const mainGridClass = hasPendingSuggestions
+    ? "grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[1fr_280px_300px]"
+    : "grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[1.35fr_280px_300px]";
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#070707] text-zinc-100">
@@ -294,8 +298,8 @@ export default function DashboardIncidentPage({
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[1fr_280px_300px]">
-        <section className="relative min-h-[260px] overflow-hidden border-b border-[#1b1b1b] md:border-r md:border-b-0">
+      <main className={`${mainGridClass} transition-[grid-template-columns] duration-300`}>
+        <section className="relative min-h-[260px] overflow-hidden border-b border-[#1b1b1b] transition-all duration-300 md:border-r md:border-b-0">
           {!dispatchOpen && <IncidentMap center={center} zones={zones.data ?? []} interactive />}
 
           <div className="pointer-events-none absolute bottom-12 left-3 flex flex-col gap-1.5 rounded-md border border-zinc-800 bg-black/80 p-2">
@@ -390,6 +394,7 @@ export default function DashboardIncidentPage({
                   zone_type?: string;
                   label?: string;
                   reason?: string;
+                  radius_meters?: number;
                 };
                 const tone = zoneTone(data.zone_type);
                 return (
@@ -406,7 +411,13 @@ export default function DashboardIncidentPage({
                     <div className="flex gap-1.5">
                       <button
                         type="button"
-                        onClick={() => resolve.mutate({ id: s.id, action: "accept" })}
+                        onClick={() =>
+                          resolve.mutate({
+                            id: s.id,
+                            action: "accept",
+                            radius: typeof data.radius_meters === "number" ? data.radius_meters : undefined,
+                          })
+                        }
                         disabled={resolve.isPending}
                         className="flex-1 rounded border border-emerald-500/40 bg-emerald-500/12 px-2 py-1.5 text-[11px] font-semibold text-emerald-400 transition disabled:opacity-60"
                       >
