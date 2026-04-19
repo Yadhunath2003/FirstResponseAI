@@ -1,4 +1,5 @@
 import os
+import uuid
 import aiofiles
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -19,6 +20,7 @@ from server.storage.database import (
     resolve_suggestion, get_recent_communications,
     get_pending_dispatch, delete_pending_dispatch,
     store_summary,
+    create_public_post, get_public_thread, get_standalone_awareness_posts, get_help_counts,
 )
 from server.ai.claude import search_history, parse_dispatch_call, geocode_address, generate_initial_summary
 from server.config import LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL
@@ -35,11 +37,15 @@ def _livekit_room_name(incident_id: str, channel_id: str) -> str:
 async def lifespan(app: FastAPI):
     init_db()
     os.makedirs("data/audio", exist_ok=True)
+    os.makedirs("data/public_media", exist_ok=True)
     yield
 
 app = FastAPI(title="FirstResponse AI", lifespan=lifespan)
 
+os.makedirs("data/audio", exist_ok=True)
+os.makedirs("data/public_media", exist_ok=True)
 app.mount("/audio", StaticFiles(directory="data/audio"), name="audio_static")
+app.mount("/public_media", StaticFiles(directory="data/public_media"), name="public_media_static")
 
 # --- REGISTRATION & INCIDENTS ---
 
@@ -441,6 +447,138 @@ async def search_incident_history(incident_id: str, payload: dict):
     comms = get_recent_communications(incident_id, limit=500)
     results = await search_history(comms, query)
     return results
+
+# --- PUBLIC / COMMUNITY ---
+
+PUBLIC_HELP_TYPES = {"ride", "shelter", "supplies", "safe", "check", "other"}
+PUBLIC_KINDS = {"awareness", "comment", "help", "need"}
+
+
+def _public_incident_view(inc: dict) -> dict:
+    """Strip fields that shouldn't appear on the public map/feed."""
+    return {
+        "id": inc["id"],
+        "name": inc.get("name"),
+        "incident_type": inc.get("incident_type"),
+        "location_name": inc.get("location_name"),
+        "location_lat": inc.get("location_lat"),
+        "location_lng": inc.get("location_lng"),
+        "status": inc.get("status"),
+        "created_at": inc.get("created_at"),
+    }
+
+
+async def _save_public_media(media: UploadFile | None) -> str | None:
+    if not media or not media.filename:
+        return None
+    safe = f"{uuid.uuid4().hex}_{media.filename}"
+    full_path = f"data/public_media/{safe}"
+    async with aiofiles.open(full_path, "wb") as out_file:
+        await out_file.write(await media.read())
+    return f"/public_media/{safe}"
+
+
+@app.get("/api/public/incidents")
+async def public_list_incidents():
+    items = [_public_incident_view(i) for i in get_incidents() if i.get("status") == "active"]
+    return items
+
+
+@app.get("/api/public/incidents/{incident_id}")
+async def public_get_incident(incident_id: str, lang: str = "en"):
+    inc = get_incident(incident_id)
+    if not inc:
+        return JSONResponse(status_code=404, content={"error": "Not Found"})
+    view = _public_incident_view(inc)
+    summary = get_latest_summary(incident_id) or get_initial_summary(incident_id)
+    summary_text = summary["summary_text"] if summary else ""
+
+    if summary_text and lang and lang != "en":
+        try:
+            from server.ai.claude import _ask
+            translated = await _ask(
+                "Rewrite the following dispatch summary in plain, calm, non-technical language for the public. "
+                f"Respond in language code '{lang}'. Keep it under 120 words. Do not invent details.",
+                summary_text,
+            )
+            if translated:
+                summary_text = translated.strip()
+        except Exception as e:
+            print(f"[public] translate failed: {e}")
+
+    view["summary"] = summary_text
+    view["help_counts"] = get_help_counts(incident_id)
+    return view
+
+
+@app.get("/api/public/incidents/{incident_id}/thread")
+async def public_get_incident_thread(incident_id: str):
+    return get_public_thread(incident_id)
+
+
+import uuid
+
+
+@app.post("/api/public/incidents/{incident_id}/posts")
+async def public_create_incident_post(
+    incident_id: str,
+    kind: str = Form(...),
+    author_name: str = Form("Neighbor"),
+    body: str | None = Form(None),
+    help_type: str | None = Form(None),
+    parent_id: str | None = Form(None),
+    media: UploadFile = File(None),
+):
+    if kind not in PUBLIC_KINDS or kind == "awareness":
+        return JSONResponse(status_code=400, content={"error": "invalid kind"})
+    if kind == "help" and help_type not in PUBLIC_HELP_TYPES:
+        return JSONResponse(status_code=400, content={"error": "invalid help_type"})
+    if not get_incident(incident_id):
+        return JSONResponse(status_code=404, content={"error": "incident not found"})
+
+    media_url = await _save_public_media(media)
+    post = create_public_post(
+        incident_id=incident_id,
+        parent_id=parent_id,
+        kind=kind,
+        author_name=author_name.strip() or "Neighbor",
+        body=(body or "").strip() or None,
+        help_type=help_type,
+        media_url=media_url,
+    )
+    await ws_manager.broadcast_to_incident(incident_id, {
+        "type": "public_post",
+        "post": post,
+    })
+    return post
+
+
+@app.get("/api/public/awareness")
+async def public_list_awareness():
+    return get_standalone_awareness_posts()
+
+
+@app.post("/api/public/awareness")
+async def public_create_awareness(
+    author_name: str = Form("Neighbor"),
+    body: str = Form(...),
+    lat: float | None = Form(None),
+    lng: float | None = Form(None),
+    media: UploadFile = File(None),
+):
+    media_url = await _save_public_media(media)
+    post = create_public_post(
+        incident_id=None,
+        parent_id=None,
+        kind="awareness",
+        author_name=author_name.strip() or "Neighbor",
+        body=body.strip(),
+        media_url=media_url,
+        lat=lat,
+        lng=lng,
+    )
+    return post
+
 
 # --- WEBSOCKET ---
 

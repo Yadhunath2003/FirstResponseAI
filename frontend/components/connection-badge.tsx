@@ -20,6 +20,19 @@ const COLOR: Record<WSStatus, string> = {
   error: "bg-red-500/20 text-red-300",
 };
 
+const DOT: Record<WSStatus, string> = {
+  idle: "bg-muted-foreground",
+  connecting: "bg-amber-400 animate-pulse",
+  open: "bg-emerald-400",
+  closed: "bg-amber-400 animate-pulse",
+  error: "bg-red-400",
+};
+
 export function ConnectionBadge({ status }: { status: WSStatus }) {
-  return <Badge className={cn("text-[10px]", COLOR[status])}>{LABEL[status]}</Badge>;
+  return (
+    <Badge className={cn("text-[11px] gap-1.5 px-2 py-0.5", COLOR[status])}>
+      <span className={cn("size-1.5 rounded-full", DOT[status])} />
+      {LABEL[status]}
+    </Badge>
+  );
 }
