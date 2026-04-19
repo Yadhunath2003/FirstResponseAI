@@ -42,7 +42,7 @@ export async function startPTT(options?: {
     recognizer.onresult = (ev) => {
       let interim = "";
       const results = ev.results;
-      for (let i = 0; i < results.length; i++) {
+      for (let i = ev.resultIndex; i < results.length; i++) {
         const r = results[i];
         if (r.isFinal) {
           finalTranscript += r[0].transcript;
