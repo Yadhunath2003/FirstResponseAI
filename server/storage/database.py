@@ -280,6 +280,16 @@ def get_latest_summary(incident_id: str) -> dict | None:
     conn.close()
     return dict(row) if row else None
 
+def get_initial_summary(incident_id: str) -> dict | None:
+    """Return the very first summary (message_count = 0), i.e. the dispatcher initial report."""
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT * FROM summaries WHERE incident_id = ? AND message_count_at_generation = 0 ORDER BY generated_at ASC LIMIT 1",
+        (incident_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
 # Map Zones
 def create_map_zone(incident_id: str, zone_type: str, lat: float, lng: float, radius: float, label: str, created_by: str) -> dict:
     conn = _get_conn()

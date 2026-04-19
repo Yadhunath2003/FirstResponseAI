@@ -164,7 +164,7 @@ export default function DashboardIncidentPage({
         {/* Right column: summary, units, suggestions */}
         <aside className="col-span-12 lg:col-span-5 flex flex-col gap-3 min-h-0">
           <div className="h-[32%] min-h-[160px]">
-            <SummaryPanel summary={incident.data?.summary ?? ""} />
+            <SummaryPanel summary={incident.data?.summary ?? ""} initialSummary={incident.data?.initial_summary} />
           </div>
 
           <Card className="h-[22%] min-h-[120px] flex flex-col">
