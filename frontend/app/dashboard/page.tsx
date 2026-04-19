@@ -6,7 +6,6 @@ import { api } from "@/lib/api";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CreateIncidentDialog } from "@/components/create-incident-dialog";
 import { Plus } from "lucide-react";
 
 export default function DashboardHome() {
@@ -24,16 +23,8 @@ export default function DashboardHome() {
           <p className="text-muted-foreground text-sm">Active incidents</p>
         </div>
         <div className="flex items-center gap-2">
-          <CreateIncidentDialog
-            detailPathBase="/dashboard"
-            trigger={
-              <Button size="sm">
-                <Plus className="size-3.5" /> New incident
-              </Button>
-            }
-          />
-          <Link href="/dashboard/dispatch" className={buttonVariants({ variant: "outline" })}>
-            Dispatch
+          <Link href="/dashboard/dispatch" className={buttonVariants({ size: "sm" })}>
+            <Plus className="size-3.5" /> New Incident
           </Link>
         </div>
       </header>
